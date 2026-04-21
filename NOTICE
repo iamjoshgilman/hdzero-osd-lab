@@ -1,0 +1,45 @@
+hdzero-osd-lab — attribution and provenance
+
+This project is licensed MIT (see LICENSE). The following notes document
+inspirations and cross-referenced sources. None of the referenced third-party
+source code is copied into this repository; reimplementations are from public
+data and documented behavior.
+
+1. HD OSD Font Tools (Python, MIT)
+   https://github.com/ondrascz/HD-OSD-Font-Tools
+   The compositor logic (glyph subsets, switch/extension/offset matrix,
+   logo-tile wrapping, MCM parser semantics, super-sampled TTF rendering)
+   was originally authored there by ondrascz. This project's TypeScript
+   compositor is a clean-room reimplementation inspired by that tool and
+   by a WhiteRqbbit fork that added palette TTF rendering and per-glyph
+   image overrides.
+
+2. Betaflight Configurator (JavaScript, GPL-3.0)
+   https://github.com/betaflight/betaflight-configurator
+   Betaflight's OSD tab defines the element table and default layout
+   positions referenced by this project's `src/osd-schema/`. We read the
+   Configurator source to cross-check element names, default grid
+   positions, and glyph-code assignments, but we do not copy code. Our
+   schema is a newly-authored TypeScript data table, MIT-licensed.
+
+3. HDZero Configurator (JavaScript)
+   https://github.com/hd-zero/hdzero-configurator
+   Referenced for HD-specific OSD element additions and the canonical
+   SD-card font path `resource/OSD/FC/BTFL_000.bmp`.
+
+4. game-icons.net (icons, CC BY 3.0)
+   https://game-icons.net
+   Sample decorative icons shipped with this tool are sourced from
+   game-icons.net under CC BY 3.0. Individual author credits
+   (e.g. Lorc, Delapouite) appear alongside each bundled asset.
+
+5. opentype.js (MIT)
+   https://github.com/opentypejs/opentype.js
+   Runtime dependency for parsing TTF/OTF font files in the browser.
+
+6. pixelmatch (ISC)
+   https://github.com/mapbox/pixelmatch
+   Dev-time dependency for visual regression testing.
+
+All third-party runtime code is listed in `package.json` with its license
+recorded here when added.

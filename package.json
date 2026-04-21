@@ -23,6 +23,7 @@
     "@preact/preset-vite": "^2.10.2",
     "@types/node": "^22.10.2",
     "autoprefixer": "^10.4.21",
+    "fake-indexeddb": "^6.2.5",
     "jsdom": "^25.0.1",
     "postcss": "^8.5.3",
     "prettier": "^3.5.3",

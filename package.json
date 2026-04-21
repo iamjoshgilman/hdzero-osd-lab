@@ -1,0 +1,34 @@
+{
+  "name": "hdzero-osd-lab",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser-based studio for designing HD OSD fonts and Craft Name decorations for HDZero FPV goggles running Betaflight.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "@preact/signals": "^2.0.3",
+    "opentype.js": "^1.3.4",
+    "preact": "^10.26.1"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.2",
+    "@types/node": "^22.10.2",
+    "autoprefixer": "^10.4.21",
+    "jsdom": "^25.0.1",
+    "postcss": "^8.5.3",
+    "prettier": "^3.5.3",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.3",
+    "vite": "^6.2.0",
+    "vitest": "^3.0.8"
+  }
+}

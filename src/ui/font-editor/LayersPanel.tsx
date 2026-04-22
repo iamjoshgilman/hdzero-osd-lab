@@ -2,8 +2,10 @@
 // v0.1.0 supports uploading a base BMP and per-glyph PNG overrides.
 
 import { useComputed } from "@preact/signals";
+import { useRef } from "preact/hooks";
 import { project, mutate } from "@/state/store";
 import { putAsset } from "@/state/assets";
+import { selectedGlyph } from "@/state/ui-state";
 import { FileDrop } from "@/ui/shared/FileDrop";
 import { Button } from "@/ui/shared/Button";
 import type { BitmapLayer } from "@/state/project";
@@ -104,7 +106,8 @@ export function LayersPanel() {
           Glyph overrides ({overrideEntries.value.length})
         </h2>
         <p class="text-xs text-slate-500 mb-2">
-          Drop a PNG/BMP for a specific glyph code. Overrides always win over layers.
+          Click a glyph in the preview to select it, then drop or upload an image.
+          Overrides always win over layers.
         </p>
         <OverrideAdder onAdd={addOverride} />
         <ul class="flex flex-col gap-1 mt-3">
@@ -133,46 +136,60 @@ export function LayersPanel() {
 }
 
 function OverrideAdder({ onAdd }: { onAdd: (code: number, file: File) => void }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const selected = useComputed(() => selectedGlyph.value);
+
+  // Two-way sync: when a glyph is clicked on the canvas, the input reflects it.
+  // When the user types a number, the selection updates so the preview highlights.
+  const inputValue = selected.value === null ? "" : String(selected.value);
+
+  const triggerUpload = () => {
+    const raw = inputRef.current?.value ?? "";
+    const code = Number(raw);
+    if (!raw || !Number.isFinite(code) || code < 0 || code > 511) {
+      alert("Pick a code 0–511 (click a glyph or type a number)");
+      return;
+    }
+    const fileEl = fileRef.current;
+    if (!fileEl) return;
+    fileEl.onchange = () => {
+      const f = fileEl.files?.[0];
+      if (f) {
+        onAdd(code, f);
+        fileEl.value = "";
+        selectedGlyph.value = null;
+      }
+    };
+    fileEl.click();
+  };
+
   return (
     <label class="flex flex-col gap-1 text-xs font-mono text-slate-400">
       <span>Code (0–511):</span>
       <div class="flex gap-2">
         <input
-          id="override-code-input"
+          ref={inputRef}
           type="number"
           min={0}
           max={511}
-          placeholder="e.g. 123"
-          class="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-slate-100"
-        />
-        <input
-          id="override-file-input"
-          type="file"
-          accept="image/*"
-          class="hidden"
-        />
-        <Button
-          variant="secondary"
-          onClick={() => {
-            const codeEl = document.getElementById("override-code-input") as HTMLInputElement | null;
-            const fileEl = document.getElementById("override-file-input") as HTMLInputElement | null;
-            if (!codeEl || !fileEl) return;
-            const code = Number(codeEl.value);
-            if (!Number.isFinite(code) || code < 0 || code > 511) {
-              alert("Code must be 0–511");
+          placeholder="click a glyph"
+          value={inputValue}
+          onInput={(e: Event) => {
+            const raw = (e.target as HTMLInputElement).value;
+            if (raw === "") {
+              selectedGlyph.value = null;
               return;
             }
-            fileEl.onchange = () => {
-              const f = fileEl.files?.[0];
-              if (f) {
-                onAdd(code, f);
-                codeEl.value = "";
-                fileEl.value = "";
-              }
-            };
-            fileEl.click();
+            const n = Number(raw);
+            if (Number.isFinite(n) && n >= 0 && n <= 511) {
+              selectedGlyph.value = n;
+            }
           }}
-        >
+          class="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-slate-100"
+        />
+        <input ref={fileRef} type="file" accept="image/*" class="hidden" />
+        <Button variant="secondary" onClick={triggerUpload}>
           Upload
         </Button>
       </div>

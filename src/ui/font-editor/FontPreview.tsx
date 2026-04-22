@@ -1,12 +1,15 @@
-// Renders a composed 384×1152 RGB atlas to a canvas with zoom + optional
-// grid overlay. Reactive: subscribes to the project signal + resolved assets
-// and re-composes whenever either changes.
+// Renders a composed 384×1152 RGB atlas to a canvas with zoom, optional grid
+// overlay, and click-to-select. Clicking a tile sets the shared
+// `selectedGlyph` signal; the selected tile is highlighted with a green
+// outline. LayersPanel reads the same signal to pre-fill its override-code
+// input.
 
 import { useEffect, useRef, useState } from "preact/hooks";
 import { useComputed } from "@preact/signals";
 import { project } from "@/state/store";
+import { selectedGlyph } from "@/state/ui-state";
 import { compose } from "@/compositor/compose";
-import { FONT_SIZE, GLYPH_SIZE, FONT_GRID } from "@/compositor/constants";
+import { FONT_SIZE, GLYPH_SIZE, FONT_GRID, codeToOrigin } from "@/compositor/constants";
 import { useResolvedAssets } from "@/ui/hooks/useResolvedAssets";
 
 export function FontPreview() {
@@ -22,8 +25,6 @@ export function FontPreview() {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    // Explicit ArrayBuffer copy so the ImageData ctor accepts the buffer in
-    // strict TS mode (SharedArrayBuffer is not assignable to ArrayBuffer).
     const rgba = rgbToRgba(atlas.value);
     const copy = new Uint8ClampedArray(new ArrayBuffer(rgba.byteLength));
     copy.set(rgba);
@@ -32,11 +33,26 @@ export function FontPreview() {
     canvas.height = FONT_SIZE.h;
     ctx.putImageData(img, 0, 0);
     if (showGrid) drawGrid(ctx);
-  }, [atlas.value, showGrid]);
+    if (selectedGlyph.value !== null) drawSelection(ctx, selectedGlyph.value);
+  }, [atlas.value, showGrid, selectedGlyph.value]);
+
+  const handleClick = (e: MouseEvent) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    // Mouse → canvas-pixel coords (accounts for zoom via displayed vs native size).
+    const px = ((e.clientX - rect.left) / rect.width) * FONT_SIZE.w;
+    const py = ((e.clientY - rect.top) / rect.height) * FONT_SIZE.h;
+    const col = Math.floor(px / GLYPH_SIZE.w);
+    const row = Math.floor(py / GLYPH_SIZE.h);
+    if (col < 0 || col >= FONT_GRID.cols || row < 0 || row >= FONT_GRID.rows) return;
+    const code = row * FONT_GRID.cols + col;
+    selectedGlyph.value = selectedGlyph.value === code ? null : code;
+  };
 
   return (
     <div class="flex flex-col items-center gap-3">
-      <div class="flex gap-4 items-center text-xs font-mono text-slate-400">
+      <div class="flex gap-4 items-center text-xs font-mono text-slate-400 flex-wrap justify-center">
         <label class="flex items-center gap-2">
           <span>Zoom</span>
           <input
@@ -57,6 +73,18 @@ export function FontPreview() {
           />
           <span>Show grid</span>
         </label>
+        {selectedGlyph.value !== null && (
+          <span class="text-osd-mint">
+            ▸ Selected glyph <span class="font-bold">#{selectedGlyph.value}</span>
+            <button
+              class="ml-2 text-slate-500 hover:text-slate-300"
+              onClick={() => (selectedGlyph.value = null)}
+              title="Clear selection"
+            >
+              clear
+            </button>
+          </span>
+        )}
         {loading.value && <span class="text-osd-amber">Loading assets…</span>}
         {error.value && <span class="text-osd-alert">{error.value}</span>}
       </div>
@@ -70,6 +98,8 @@ export function FontPreview() {
       >
         <canvas
           ref={canvasRef}
+          onClick={handleClick}
+          class="cursor-crosshair"
           style={{
             width: `${FONT_SIZE.w * zoom}px`,
             height: `${FONT_SIZE.h * zoom}px`,
@@ -109,4 +139,15 @@ function drawGrid(ctx: CanvasRenderingContext2D): void {
     ctx.lineTo(FONT_SIZE.w, y);
     ctx.stroke();
   }
+}
+
+function drawSelection(ctx: CanvasRenderingContext2D, code: number): void {
+  const { x, y } = codeToOrigin(code);
+  // Neon mint stroke, chunky enough to read on a zoomed pixel canvas.
+  ctx.strokeStyle = "#00ffaa";
+  ctx.lineWidth = 2;
+  ctx.shadowColor = "#00ffaa";
+  ctx.shadowBlur = 4;
+  ctx.strokeRect(x + 1, y + 1, GLYPH_SIZE.w - 2, GLYPH_SIZE.h - 2);
+  ctx.shadowBlur = 0;
 }

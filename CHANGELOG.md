@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-04-21
+
+### Added
+
+- `src/state/ui-state.ts` — ephemeral (non-project) UI signals. First entry: `selectedGlyph` (`Signal<number | null>`).
+- Click-to-select on the `FontPreview` canvas: click a tile → sets `selectedGlyph`, draws a neon-mint outline around it; click again to toggle off.
+- `LayersPanel` override adder is two-way-bound to `selectedGlyph`: clicking a glyph in the preview auto-fills the code input; typing a number highlights that tile in the preview.
+- Selection status shown in the preview toolbar ("▸ Selected glyph #NNN" with a clear button).
+
 ## [0.1.0] - 2026-04-21 — Phase 1 "Compositor MVP" complete
 
 ### Added — Track D (UI shell)

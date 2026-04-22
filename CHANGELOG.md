@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-04-21
+
+### Added
+
+- `src/ui/font-editor/glyph-metadata.ts` — pure helper mapping a glyph code to its `GlyphMetadata` (ASCII char, containing subsets, best-fit `GlyphCategory`, `isUsable` flag). Exports `CATEGORY_COLORS` and `CATEGORY_LABELS`. Category priority when a code is in multiple subsets: logo > icon > special > number > letter > unused (e.g. code 91 is both `BTFL_MINILOGO` and `BTFL_SPECIALS` → resolves to `logo`).
+- `src/ui/font-editor/glyph-metadata.test.ts` — 9 cases covering letters, numbers, specials, icons, logos, unused slots, lowercase-letter routing through `BTFL_LOWLETTERS`, and palette/label completeness.
+- `src/ui/font-editor/InspectorPanel.tsx` — new right-side column (~260px) showing the currently-selected glyph: `#NNN` heading tinted by category, ASCII preview, 4× nearest-neighbor tile close-up pulled from the live composed atlas, category label, subset chip list, and a safety note (⚠ for firmware-drawn slots, ✓ for unused, neutral for logo banner).
+
+### Changed
+
+- `src/ui/font-editor/FontPreview.tsx` — new toolbar checkbox **Category overlay**. When on, every tile is tinted at alpha 0.18 with its category color. Drawn UNDER the grid and selection outline so selection stays crisp. Unused tiles skip the fill so the base font reads cleanly.
+- `src/ui/shell/AppShell.tsx` — renders `<InspectorPanel />` as a right-side column inside `<main>` on the Font tab. Hidden on the OSD and Decoration tabs.
+
+### Notes
+
+- Category palette uses soft blue (`#9cdcfe`) for letters, `osd-mint` for numbers, `osd-amber` for specials, `osd-magenta` for icons, pink (`#ff6bcb`) for logos, dim slate for unused.
+- Test totals: 102 → 111 (+9). Typecheck clean. Production bundle: 49.14 KB JS / 11.50 KB CSS (18.14 / 2.87 KB gzipped).
+
 ## [0.1.2] - 2026-04-21
 
 ### Added

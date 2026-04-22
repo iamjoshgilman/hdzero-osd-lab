@@ -3,20 +3,32 @@
 // `selectedGlyph` signal; the selected tile is highlighted with a green
 // outline. LayersPanel reads the same signal to pre-fill its override-code
 // input.
+//
+// v0.1.3 adds a toggle-able category overlay: each tile is tinted with the
+// color of its best-fit subset (letter/number/special/icon/logo/unused) so
+// the pilot can see at a glance which slots the firmware actually uses.
 
 import { useEffect, useRef, useState } from "preact/hooks";
 import { useComputed } from "@preact/signals";
 import { project } from "@/state/store";
 import { selectedGlyph } from "@/state/ui-state";
 import { compose } from "@/compositor/compose";
-import { FONT_SIZE, GLYPH_SIZE, FONT_GRID, codeToOrigin } from "@/compositor/constants";
+import {
+  FONT_SIZE,
+  GLYPH_SIZE,
+  FONT_GRID,
+  GLYPH_COUNT,
+  codeToOrigin,
+} from "@/compositor/constants";
 import { useResolvedAssets } from "@/ui/hooks/useResolvedAssets";
+import { getGlyphMetadata, CATEGORY_COLORS } from "./glyph-metadata";
 
 export function FontPreview() {
   const { assets, loading, error } = useResolvedAssets();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [zoom, setZoom] = useState<number>(1);
   const [showGrid, setShowGrid] = useState<boolean>(false);
+  const [showOverlay, setShowOverlay] = useState<boolean>(false);
 
   const atlas = useComputed(() => compose(project.value, assets.value));
 
@@ -32,9 +44,12 @@ export function FontPreview() {
     canvas.width = FONT_SIZE.w;
     canvas.height = FONT_SIZE.h;
     ctx.putImageData(img, 0, 0);
+    // Order matters: the category tint goes UNDER the grid + selection so the
+    // selected tile's outline reads crisply on top of the color wash.
+    if (showOverlay) drawCategoryOverlay(ctx);
     if (showGrid) drawGrid(ctx);
     if (selectedGlyph.value !== null) drawSelection(ctx, selectedGlyph.value);
-  }, [atlas.value, showGrid, selectedGlyph.value]);
+  }, [atlas.value, showGrid, showOverlay, selectedGlyph.value]);
 
   const handleClick = (e: MouseEvent) => {
     const canvas = canvasRef.current;
@@ -72,6 +87,14 @@ export function FontPreview() {
             onInput={(e: Event) => setShowGrid((e.target as HTMLInputElement).checked)}
           />
           <span>Show grid</span>
+        </label>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showOverlay}
+            onInput={(e: Event) => setShowOverlay((e.target as HTMLInputElement).checked)}
+          />
+          <span>Category overlay</span>
         </label>
         {selectedGlyph.value !== null && (
           <span class="text-osd-mint">
@@ -150,4 +173,22 @@ function drawSelection(ctx: CanvasRenderingContext2D, code: number): void {
   ctx.shadowBlur = 4;
   ctx.strokeRect(x + 1, y + 1, GLYPH_SIZE.w - 2, GLYPH_SIZE.h - 2);
   ctx.shadowBlur = 0;
+}
+
+/**
+ * Tint every tile with its category color at low alpha. Runs once per render
+ * (the atlas is only 16×32 tiles; 512 fillRects is cheap).
+ */
+function drawCategoryOverlay(ctx: CanvasRenderingContext2D): void {
+  const prevAlpha = ctx.globalAlpha;
+  ctx.globalAlpha = 0.18;
+  for (let code = 0; code < GLYPH_COUNT; code++) {
+    const { category } = getGlyphMetadata(code);
+    // Unused tiles stay visually neutral — skip the fill so the base font shows through cleanly.
+    if (category === "unused") continue;
+    const { x, y } = codeToOrigin(code);
+    ctx.fillStyle = CATEGORY_COLORS[category];
+    ctx.fillRect(x, y, GLYPH_SIZE.w, GLYPH_SIZE.h);
+  }
+  ctx.globalAlpha = prevAlpha;
 }

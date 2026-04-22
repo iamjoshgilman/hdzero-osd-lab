@@ -8,6 +8,7 @@ import { useResolvedAssets } from "@/ui/hooks/useResolvedAssets";
 import { Button } from "@/ui/shared/Button";
 import { LayersPanel } from "@/ui/font-editor/LayersPanel";
 import { FontPreview } from "@/ui/font-editor/FontPreview";
+import { InspectorPanel } from "@/ui/font-editor/InspectorPanel";
 import { TabBar } from "@/ui/shell/TabBar";
 import { OsdPreviewStub } from "@/ui/osd-preview/OsdPreviewStub";
 import { DecorationStub } from "@/ui/decoration/DecorationStub";
@@ -42,6 +43,7 @@ export function AppShell() {
           {view.value === "osd" && <OsdPreviewStub />}
           {view.value === "decoration" && <DecorationStub />}
         </section>
+        {view.value === "font" && <InspectorPanel />}
       </main>
       <StatusBar />
     </div>

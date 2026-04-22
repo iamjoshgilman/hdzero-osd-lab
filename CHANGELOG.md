@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.11] - 2026-04-22
+
+### Added — Decoration tab with logo-slot uploaders
+
+- `DecorationStub` replaced with a real `DecorationPage` that wires up the compositor's existing `LogoLayer` support so users can upload banner / mini / INAV logos:
+  - **BTFL Logo (576×144)** — the big BETAFLIGHT-style banner. Shown when Betaflight's Logo OSD element is enabled, typically at startup / disarmed.
+  - **Mini Logo (120×36)** — 5-tile inline logo at glyph codes 91..95. Show in flight by setting your Craft Name to <code>[\\]^_</code>.
+  - **INAV Logo (240×144)** — INAV firmware equivalent of the BTFL banner.
+- Each slot shows size guidance (exact target dimensions, aspect-fit behavior, chroma-gray transparency note, high-contrast-reads-best tip) so users know what they're designing for before they generate an image.
+- Upload adds a `LogoLayer` to `project.font.layers`; replacing an image removes the old layer for that slot and pushes the new one (one logo per slot). Clear removes the slot's layer.
+- Same IndexedDB asset path as everything else — logos persist across reloads once the project-persistence layer lands.
+- Placeholder section for the full Craft Name designer tagged v0.3.0 so users know it's the next headline.
+
+### Fixed
+
+- Sample-font dropdowns in `LayersPanel.SampleFontPicker` and `BitmapLayerForm` no longer use a `disabled` placeholder option. After loading a sample the dropdown still resets to a visible "Pick a font…" label but it's now selectable rather than appearing locked — addresses the "greyed out / looks saved" impression when re-opening the picker.
+
+### Changed
+
+- Decoration tab no longer carries a `v0.3` phase badge. Logo uploaders shipping in this commit means the tab is a live feature, not a scheduled stub.
+
+### Bumped
+
+- `package.json` version `0.2.10` → `0.2.11`.
+
 ## [0.2.10] - 2026-04-22
 
 ### Added — Edit bitmap layers in place

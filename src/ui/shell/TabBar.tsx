@@ -10,7 +10,7 @@ interface Tab {
 const TABS: Tab[] = [
   { id: "font", label: "Font" },
   { id: "osd", label: "OSD Preview" },
-  { id: "decoration", label: "Decoration", phaseTag: "v0.3" },
+  { id: "decoration", label: "Decoration" },
   { id: "resources", label: "Resources" },
 ];
 

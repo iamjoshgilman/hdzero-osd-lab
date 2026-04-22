@@ -174,9 +174,7 @@ export function BitmapLayerForm({ onClose, editing }: Props) {
           class="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100"
           defaultValue=""
         >
-          <option value="" disabled>
-            Pick a font…
-          </option>
+          <option value="">Pick a font…</option>
           {SAMPLES.map((s) => (
             <option key={s.file} value={s.file}>
               {s.label}

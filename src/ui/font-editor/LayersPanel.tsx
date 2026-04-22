@@ -341,9 +341,7 @@ function SampleFontPicker({ onPick }: { onPick: (filename: string, displayName: 
           defaultValue=""
           class="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-[11px] text-slate-100 font-mono"
         >
-          <option value="" disabled>
-            Pick a font…
-          </option>
+          <option value="">Pick a font…</option>
           {SAMPLE_FONTS.map((s) => (
             <option key={s.file} value={s.file}>
               {s.label}

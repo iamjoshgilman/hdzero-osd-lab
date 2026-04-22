@@ -15,7 +15,7 @@ import { TabBar } from "@/ui/shell/TabBar";
 import { OsdCanvas } from "@/ui/osd-preview/OsdCanvas";
 import { ElementLibrary } from "@/ui/osd-preview/ElementLibrary";
 import { ResourcesPage } from "@/ui/resources/ResourcesPage";
-import { DecorationStub } from "@/ui/decoration/DecorationStub";
+import { DecorationPage } from "@/ui/decoration/DecorationPage";
 
 export function AppShell() {
   const { assets } = useResolvedAssets();
@@ -58,7 +58,7 @@ export function AppShell() {
         <section class="flex-1 overflow-auto p-6 flex justify-center">
           {view.value === "font" && <FontPreview />}
           {view.value === "osd" && <OsdCanvas />}
-          {view.value === "decoration" && <DecorationStub />}
+          {view.value === "decoration" && <DecorationPage />}
           {view.value === "resources" && <ResourcesPage />}
         </section>
         {view.value === "font" && <InspectorPanel />}

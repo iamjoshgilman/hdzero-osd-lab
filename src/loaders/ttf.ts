@@ -50,12 +50,24 @@ export async function rasterizeTtfSubset(
   const family = `__hdzoslab_${++fontFaceCounter}_${Date.now()}`;
   const face = new FontFace(family, fontBytes);
   await face.load();
-  // Register so canvas can resolve it. `self.fonts` works in both DedicatedWorker
-  // and Window contexts in modern browsers.
-  (self as unknown as { fonts: FontFaceSet }).fonts.add(face);
+
+  // `document.fonts` on the main thread; `self.fonts` inside a Worker.
+  // Canvas text rendering reads from this set.
+  const fontSet =
+    typeof document !== "undefined"
+      ? document.fonts
+      : (self as unknown as { fonts: FontFaceSet }).fonts;
+  fontSet.add(face);
+
+  // Some browsers don't propagate a newly-added FontFace to canvas contexts
+  // synchronously. Explicitly asking `fonts.load()` for the exact declaration
+  // we're about to use forces the wait so `ctx.fillText` actually renders
+  // our font (instead of a silent fallback to sans-serif).
+  const ss = opts.superSampling;
+  const pxSize = opts.size * ss;
+  await fontSet.load(`${pxSize}px "${family}"`);
 
   try {
-    const ss = opts.superSampling;
     const workW = GLYPH_SIZE.w * ss;
     const workH = Math.floor((GLYPH_SIZE.h * ss) / opts.vStretch);
     const out: TileMap = new Map();
@@ -69,7 +81,7 @@ export async function rasterizeTtfSubset(
     }
     return out;
   } finally {
-    (self as unknown as { fonts: FontFaceSet }).fonts.delete(face);
+    fontSet.delete(face);
   }
 }
 

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-04-22
+
+### Fixed
+
+- **TTF rasterization wasn't actually using the uploaded font.** `rasterizeTtfSubset` added the `FontFace` to `self.fonts` then immediately set `ctx.font`, but some browsers don't propagate a newly-added face to a canvas context synchronously — so the canvas silently rendered with the default sans-serif fallback, and the "TTF layer" looked like it had no effect. Now explicitly `await fontSet.load("<pxSize>px <family>")` after adding the face, forcing the runtime to finish registering the font before we draw with it. Also switched from `self.fonts` to `document.fonts` on the main thread for clarity (falls back to `self.fonts` inside workers).
+
+### Added — per-layer error surfacing
+
+- `useResolvedAssets` now exposes a `layerErrors: Signal<Record<string, string>>` map. When a layer's asset is missing from IndexedDB or its rasterization throws, the error string goes into the map keyed by layer id.
+- `LayersPanel` renders each errored layer with a red outline and an inline `⚠ <message>` line. While a TTF layer is mid-render, it shows an amber "Rendering…" hint so users aren't confused by the ~300–800 ms first-render latency.
+
+### Bumped
+
+- `package.json` version `0.2.2` → `0.2.3`.
+
 ## [0.2.2] - 2026-04-22
 
 ### Added — TTF palette layer support (the headline WhiteRqbbit feature)

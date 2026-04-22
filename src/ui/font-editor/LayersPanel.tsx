@@ -9,11 +9,13 @@ import { selectedGlyph } from "@/state/ui-state";
 import { FileDrop } from "@/ui/shared/FileDrop";
 import { Button } from "@/ui/shared/Button";
 import { TtfLayerForm } from "./TtfLayerForm";
+import { useResolvedAssets } from "@/ui/hooks/useResolvedAssets";
 import type { BitmapLayer } from "@/state/project";
 
 export function LayersPanel() {
   const layers = useComputed(() => project.value.font.layers);
   const overrideEntries = useComputed(() => Object.entries(project.value.font.overrides));
+  const { layerErrors, loading } = useResolvedAssets();
   const [ttfFormOpen, setTtfFormOpen] = useState<boolean>(false);
 
   const addBaseBmp = async (file: File) => {
@@ -113,27 +115,45 @@ export function LayersPanel() {
           <p class="text-xs text-slate-500">Upload a base font above or add a TTF layer to get started.</p>
         )}
         <ul class="flex flex-col gap-2">
-          {layers.value.map((layer) => (
-            <li
-              key={layer.id}
-              class="flex items-center gap-2 bg-slate-800 rounded p-2 font-mono text-xs"
-            >
-              <input
-                type="checkbox"
-                checked={layer.enabled}
-                onInput={() => toggleLayer(layer.id)}
-              />
-              <span class="flex-1 truncate">
-                <span class="text-osd-amber">{layer.kind}</span>{" "}
-                <span class="text-slate-400">
-                  / {layer.kind === "logo" ? layer.slot : layer.subset}
-                </span>
-              </span>
-              <Button variant="danger" onClick={() => removeLayer(layer.id)} class="!px-2 !py-1">
-                ×
-              </Button>
-            </li>
-          ))}
+          {layers.value.map((layer) => {
+            const err = layerErrors.value[layer.id];
+            return (
+              <li
+                key={layer.id}
+                class={[
+                  "flex flex-col gap-1 rounded p-2 font-mono text-xs",
+                  err ? "bg-red-950/60 border border-osd-alert/60" : "bg-slate-800",
+                ].join(" ")}
+              >
+                <div class="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={layer.enabled}
+                    onInput={() => toggleLayer(layer.id)}
+                  />
+                  <span class="flex-1 truncate">
+                    <span class="text-osd-amber">{layer.kind}</span>{" "}
+                    <span class="text-slate-400">
+                      / {layer.kind === "logo" ? layer.slot : layer.subset}
+                    </span>
+                  </span>
+                  <Button
+                    variant="danger"
+                    onClick={() => removeLayer(layer.id)}
+                    class="!px-2 !py-1"
+                  >
+                    ×
+                  </Button>
+                </div>
+                {err && (
+                  <p class="text-[10px] text-osd-alert leading-snug pl-6">⚠ {err}</p>
+                )}
+                {!err && layer.kind === "ttf" && loading.value && (
+                  <p class="text-[10px] text-osd-amber leading-snug pl-6">Rendering…</p>
+                )}
+              </li>
+            );
+          })}
         </ul>
       </section>
 

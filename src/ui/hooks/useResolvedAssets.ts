@@ -22,6 +22,8 @@ export interface ResolvedAssetsState {
   assets: Signal<ResolvedAssets>;
   loading: Signal<boolean>;
   error: Signal<string | null>;
+  /** Per-layer error messages (layer.id → error). Surfaced inline in the layers list. */
+  layerErrors: Signal<Record<string, string>>;
   /** OSD-preview background image, if the project has one. */
   bgImage: Signal<ImageBitmap | null>;
 }
@@ -30,6 +32,7 @@ const state: ResolvedAssetsState = {
   assets: signal<ResolvedAssets>(emptyResolvedAssets()),
   loading: signal<boolean>(false),
   error: signal<string | null>(null),
+  layerErrors: signal<Record<string, string>>({}),
   bgImage: signal<ImageBitmap | null>(null),
 };
 
@@ -45,13 +48,15 @@ export function useResolvedAssets(): ResolvedAssetsState {
     const run = async (doc: ProjectDoc) => {
       state.loading.value = true;
       state.error.value = null;
+      const errs: Record<string, string> = {};
       try {
         const next = emptyResolvedAssets();
         await loadBitmapLayers(doc, next);
-        await loadTtfLayers(doc, next);
+        await loadTtfLayers(doc, next, errs);
         await loadOverrideTiles(doc, next);
         if (!cancelled) {
           state.assets.value = next;
+          state.layerErrors.value = errs;
         }
         await syncBgImage(doc, cancelled);
       } catch (err) {
@@ -118,18 +123,26 @@ async function loadBitmapLayers(doc: ProjectDoc, out: ResolvedAssets): Promise<v
  * keyed by layer.id (not asset hash) since two layers can share a TTF but
  * render with different sizes / colors / subsets.
  */
-async function loadTtfLayers(doc: ProjectDoc, out: ResolvedAssets): Promise<void> {
+async function loadTtfLayers(
+  doc: ProjectDoc,
+  out: ResolvedAssets,
+  errs: Record<string, string>,
+): Promise<void> {
   for (const layer of doc.font.layers) {
     if (layer.kind !== "ttf") continue;
     if (!layer.enabled) continue;
     if (layer.source.kind !== "user") continue;
     const rec = await getAsset(layer.source.hash);
-    if (!rec) continue;
+    if (!rec) {
+      errs[layer.id] = "asset not found in IndexedDB";
+      continue;
+    }
     try {
       const tiles = await rasterizeOneTtfLayer(layer, rec.bytes);
       out.ttf.set(layer.id, tiles);
     } catch (err) {
-      // Surface the error but keep loading other layers.
+      const msg = err instanceof Error ? err.message : String(err);
+      errs[layer.id] = msg;
       console.error(`TTF layer "${layer.id}" failed to rasterize:`, err);
     }
   }

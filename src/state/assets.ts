@@ -31,12 +31,15 @@ function openDb(): Promise<IDBDatabase> {
 
 /** Hex-encoded SHA-256 of a byte blob. */
 export async function hashBytes(bytes: ArrayBuffer | Uint8Array): Promise<string> {
-  // Normalize to a fresh ArrayBuffer so we never pass SharedArrayBuffer to
-  // crypto.subtle.digest (which rejects shared buffers in strict TS mode).
+  // Copy into a fresh Uint8Array so we never pass a SharedArrayBuffer-backed
+  // view to crypto.subtle.digest (which strict TS + strict Node WebCrypto
+  // both reject). Pass the TypedArray itself, not `.buffer` — `.buffer`
+  // hits a realm-crossing `instanceof ArrayBuffer` check under vitest/jsdom
+  // on Node 22+ that returns false and throws TypeError from SubtleCrypto.
   const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   const copy = new Uint8Array(view.byteLength);
   copy.set(view);
-  const digest = await crypto.subtle.digest("SHA-256", copy.buffer);
+  const digest = await crypto.subtle.digest("SHA-256", copy);
   return Array.from(new Uint8Array(digest))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");

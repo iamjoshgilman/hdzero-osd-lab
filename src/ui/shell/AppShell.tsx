@@ -10,7 +10,7 @@ import { LayersPanel } from "@/ui/font-editor/LayersPanel";
 import { FontPreview } from "@/ui/font-editor/FontPreview";
 import { InspectorPanel } from "@/ui/font-editor/InspectorPanel";
 import { TabBar } from "@/ui/shell/TabBar";
-import { OsdPreviewStub } from "@/ui/osd-preview/OsdPreviewStub";
+import { OsdCanvas } from "@/ui/osd-preview/OsdCanvas";
 import { DecorationStub } from "@/ui/decoration/DecorationStub";
 
 export function AppShell() {
@@ -40,7 +40,7 @@ export function AppShell() {
         <LayersPanel />
         <section class="flex-1 overflow-auto p-6 flex justify-center">
           {view.value === "font" && <FontPreview />}
-          {view.value === "osd" && <OsdPreviewStub />}
+          {view.value === "osd" && <OsdCanvas />}
           {view.value === "decoration" && <DecorationStub />}
         </section>
         {view.value === "font" && <InspectorPanel />}

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.2] - 2026-04-22
+
+### Added — OSD canvas renderer
+
+- `src/ui/osd-preview/OsdCanvas.tsx` — the OSD tab is now a **live, reactive 53×20 simulator** (1272×720 native, scaled to fit). Each enabled element from `OSD_ELEMENTS` blits its sample glyph sequence against the currently-composed font atlas.
+- Chroma-gray pixels in the atlas are treated as transparent so the background color shows through, matching real goggle compositing.
+- Background dropdown: `Chroma-gray` (default), `Dark (sky)`, `Trees (dark green)`, `Black` — quick way to preview your font over various FPV conditions without uploading an image.
+- "Fit width" toggle so you can view at native 1:1 or scale to container.
+- Element count in the status line: "N of 33 elements enabled".
+- Effective-position resolver: elements with no entry in `project.osdLayout.elements` fall through to their schema defaults, so a fresh project shows a sensible stock-BF layout immediately.
+
+### Changed
+
+- `AppShell` OSD tab now mounts `<OsdCanvas />` instead of the placeholder stub from v0.1.2.
+
+### Notes
+
+- alpha.2 is read-only: no drag, no selection. alpha.3 adds the element library sidebar + drag-to-reposition so you can tailor the layout.
+
 ## [0.2.0-alpha.1] - 2026-04-22
 
 ### Added — Phase 2 OSD schema

@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.9] - 2026-04-22
+
+### Added — Layer reordering
+
+- **▲ / ▼ buttons** on every layer row in the Font tab's sidebar. Move layers up (toward the top of the compositing stack — wins more at shared glyph codes) or down (toward the base). Disabled at the boundaries.
+- `moveLayerUp()` / `moveLayerDown()` mutations in `LayersPanel` swap adjacent entries in `project.font.layers`. Each move is one undo step.
+
+### Changed
+
+- **Layers list now displays top-of-stack first** (Photoshop / Figma convention). The compose order in the project doc is unchanged — array index 0 is still the base, last index is still the most-visible layer. We only reversed the *display* order so "top of list" and "top of the stack" match intuitively. Previously they were opposite, which is why deleting + re-adding a base font caused it to quietly end up on top of everything else.
+- Added a one-line hint above the list when there are ≥ 2 layers: "Top of list = top of the stack (wins over lower layers at shared glyph codes)."
+
+### Bumped
+
+- `package.json` version `0.2.8` → `0.2.9`.
+
 ## [0.2.8] - 2026-04-22
 
 ### Added — OSD preview export

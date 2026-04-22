@@ -56,6 +56,28 @@ export function LayersPanel() {
     });
   };
 
+  /** Move a layer one slot toward the TOP of the stack (later in the array = wins more). */
+  const moveLayerUp = (id: string) => {
+    mutate((doc) => {
+      const idx = doc.font.layers.findIndex((l) => l.id === id);
+      if (idx < 0 || idx >= doc.font.layers.length - 1) return;
+      const next = doc.font.layers[idx + 1]!;
+      doc.font.layers[idx + 1] = doc.font.layers[idx]!;
+      doc.font.layers[idx] = next;
+    });
+  };
+
+  /** Move a layer one slot toward the BOTTOM (earlier in the array = base). */
+  const moveLayerDown = (id: string) => {
+    mutate((doc) => {
+      const idx = doc.font.layers.findIndex((l) => l.id === id);
+      if (idx <= 0) return;
+      const prev = doc.font.layers[idx - 1]!;
+      doc.font.layers[idx - 1] = doc.font.layers[idx]!;
+      doc.font.layers[idx] = prev;
+    });
+  };
+
   const addOverride = async (code: number, file: File) => {
     const buf = await file.arrayBuffer();
     const hash = await putAsset(buf, { name: file.name, mime: file.type || "image/png" });
@@ -126,9 +148,19 @@ export function LayersPanel() {
         {layers.value.length === 0 && (
           <p class="text-xs text-slate-500">Upload a base font above or add a TTF layer to get started.</p>
         )}
+        {layers.value.length > 1 && (
+          <p class="text-[10px] text-slate-500 mb-1 leading-snug">
+            Top of list = top of the stack (wins over lower layers at shared glyph codes).
+          </p>
+        )}
         <ul class="flex flex-col gap-2">
-          {layers.value.map((layer) => {
+          {[...layers.value]
+            .map((layer, arrayIdx) => ({ layer, arrayIdx }))
+            .reverse()
+            .map(({ layer, arrayIdx }) => {
             const err = layerErrors.value[layer.id];
+            const isTop = arrayIdx === layers.value.length - 1;
+            const isBottom = arrayIdx === 0;
             return (
               <li
                 key={layer.id}
@@ -149,6 +181,26 @@ export function LayersPanel() {
                       / {layer.kind === "logo" ? layer.slot : layer.subset}
                     </span>
                   </span>
+                  <div class="flex items-center">
+                    <Button
+                      variant="secondary"
+                      onClick={() => moveLayerUp(layer.id)}
+                      disabled={isTop}
+                      class="!px-1.5 !py-1 !text-[10px]"
+                      title="Move up (toward top of stack)"
+                    >
+                      ▲
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      onClick={() => moveLayerDown(layer.id)}
+                      disabled={isBottom}
+                      class="!px-1.5 !py-1 !text-[10px]"
+                      title="Move down (toward base)"
+                    >
+                      ▼
+                    </Button>
+                  </div>
                   {layer.kind === "ttf" && (
                     <Button
                       variant="secondary"

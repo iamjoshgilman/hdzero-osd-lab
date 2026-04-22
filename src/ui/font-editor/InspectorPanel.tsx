@@ -123,11 +123,22 @@ function TilePreview({ atlas, code }: { atlas: Uint8ClampedArray; code: number }
     canvas.width = GLYPH_SIZE.w;
     canvas.height = GLYPH_SIZE.h;
     const tile = extractTile(atlas, code);
+    // Substitute chroma-gray for the panel background (slate-900 = #0f172a)
+    // so light glyphs read; mirrors the preview's goggle-sim bg treatment.
     const rgba = new Uint8ClampedArray(GLYPH_SIZE.w * GLYPH_SIZE.h * 4);
     for (let i = 0, j = 0; i < tile.length; i += 3, j += 4) {
-      rgba[j] = tile[i]!;
-      rgba[j + 1] = tile[i + 1]!;
-      rgba[j + 2] = tile[i + 2]!;
+      const r = tile[i]!;
+      const g = tile[i + 1]!;
+      const b = tile[i + 2]!;
+      if (r === 127 && g === 127 && b === 127) {
+        rgba[j] = 0x0f;
+        rgba[j + 1] = 0x17;
+        rgba[j + 2] = 0x2a;
+      } else {
+        rgba[j] = r;
+        rgba[j + 1] = g;
+        rgba[j + 2] = b;
+      }
       rgba[j + 3] = 255;
     }
     ctx.putImageData(new ImageData(rgba, GLYPH_SIZE.w, GLYPH_SIZE.h), 0, 0);

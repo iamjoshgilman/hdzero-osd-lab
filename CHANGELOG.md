@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-04-21
+
+### Changed — Preview background simulates goggle output
+
+- `FontPreview` canvas now substitutes the chroma-gray (127,127,127) pixels of the composed atlas with a **dark background** by default, matching what HDZero firmware actually shows when it composites the font over live FPV video. Without this, light-tone fonts like the ondrascz grey starter were almost invisible against the raw chroma-gray background.
+- New **BG** dropdown in the preview toolbar: `Dark (goggle-like)` / `Navy sky` / `Black` / `Chroma-gray (raw)`. The chroma-gray option shows the literal atlas bytes for anyone debugging compositor output.
+- `InspectorPanel` tile close-up applies the same substitution against slate-900 for consistency.
+
+### Fixed
+
+- Grey starter font was effectively unreadable against its own chroma-gray bg. The font itself is unchanged; only the preview rendering improved. The saved BMP is still chroma-gray in those slots — exactly what the goggles expect.
+
 ## [0.1.5] - 2026-04-21
 
 ### Added — Sample base fonts

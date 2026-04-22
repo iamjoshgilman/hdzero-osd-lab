@@ -23,12 +23,28 @@ import {
 import { useResolvedAssets } from "@/ui/hooks/useResolvedAssets";
 import { getGlyphMetadata, CATEGORY_COLORS } from "./glyph-metadata";
 
+/**
+ * Preview background options. Goggles composite the font over live FPV video
+ * by treating chroma-gray (127,127,127) as transparent. Our canvas draws the
+ * raw atlas bytes by default — which means light glyphs on a chroma-gray
+ * background wash out and don't match what the pilot sees in-flight. The
+ * toggle here lets the preview simulate different show-through backgrounds.
+ */
+const PREVIEW_BACKGROUNDS = {
+  dark: { label: "Dark (goggle-like)", rgb: [15, 23, 42] as const }, // slate-950
+  navy: { label: "Navy sky", rgb: [30, 58, 95] as const },
+  black: { label: "Black", rgb: [0, 0, 0] as const },
+  chroma: { label: "Chroma-gray (raw)", rgb: [127, 127, 127] as const },
+} as const;
+type PreviewBg = keyof typeof PREVIEW_BACKGROUNDS;
+
 export function FontPreview() {
   const { assets, loading, error } = useResolvedAssets();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [zoom, setZoom] = useState<number>(1);
   const [showGrid, setShowGrid] = useState<boolean>(false);
   const [showOverlay, setShowOverlay] = useState<boolean>(false);
+  const [bgMode, setBgMode] = useState<PreviewBg>("dark");
 
   const atlas = useComputed(() => compose(project.value, assets.value));
 
@@ -37,7 +53,8 @@ export function FontPreview() {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const rgba = rgbToRgba(atlas.value);
+    const bg = PREVIEW_BACKGROUNDS[bgMode].rgb;
+    const rgba = rgbToRgbaWithBg(atlas.value, bg);
     const copy = new Uint8ClampedArray(new ArrayBuffer(rgba.byteLength));
     copy.set(rgba);
     const img = new ImageData(copy, FONT_SIZE.w, FONT_SIZE.h);
@@ -49,7 +66,7 @@ export function FontPreview() {
     if (showOverlay) drawCategoryOverlay(ctx);
     if (showGrid) drawGrid(ctx);
     if (selectedGlyph.value !== null) drawSelection(ctx, selectedGlyph.value);
-  }, [atlas.value, showGrid, showOverlay, selectedGlyph.value]);
+  }, [atlas.value, showGrid, showOverlay, selectedGlyph.value, bgMode]);
 
   const handleClick = (e: MouseEvent) => {
     const canvas = canvasRef.current;
@@ -96,6 +113,20 @@ export function FontPreview() {
           />
           <span>Category overlay</span>
         </label>
+        <label class="flex items-center gap-2">
+          <span>BG</span>
+          <select
+            value={bgMode}
+            onChange={(e: Event) => setBgMode((e.target as HTMLSelectElement).value as PreviewBg)}
+            class="bg-slate-800 border border-slate-700 rounded px-1 py-0.5 text-slate-100 text-xs"
+          >
+            {Object.entries(PREVIEW_BACKGROUNDS).map(([key, def]) => (
+              <option key={key} value={key}>
+                {def.label}
+              </option>
+            ))}
+          </select>
+        </label>
         {selectedGlyph.value !== null && (
           <span class="text-osd-mint">
             ▸ Selected glyph <span class="font-bold">#{selectedGlyph.value}</span>
@@ -134,12 +165,30 @@ export function FontPreview() {
   );
 }
 
-function rgbToRgba(rgb: Uint8ClampedArray): Uint8ClampedArray {
+/**
+ * Convert the composed RGB atlas to RGBA, swapping every chroma-gray pixel
+ * for the caller-provided background color so the preview matches what the
+ * pilot sees when the goggles composite the font over live video.
+ */
+function rgbToRgbaWithBg(
+  rgb: Uint8ClampedArray,
+  bg: readonly [number, number, number],
+): Uint8ClampedArray {
   const rgba = new Uint8ClampedArray((rgb.length / 3) * 4);
+  const [br, bg_, bb] = bg;
   for (let i = 0, j = 0; i < rgb.length; i += 3, j += 4) {
-    rgba[j] = rgb[i]!;
-    rgba[j + 1] = rgb[i + 1]!;
-    rgba[j + 2] = rgb[i + 2]!;
+    const r = rgb[i]!;
+    const g = rgb[i + 1]!;
+    const b = rgb[i + 2]!;
+    if (r === 127 && g === 127 && b === 127) {
+      rgba[j] = br;
+      rgba[j + 1] = bg_;
+      rgba[j + 2] = bb;
+    } else {
+      rgba[j] = r;
+      rgba[j + 1] = g;
+      rgba[j + 2] = b;
+    }
     rgba[j + 3] = 255;
   }
   return rgba;

@@ -1,5 +1,7 @@
+import { useEffect } from "preact/hooks";
 import { useComputed } from "@preact/signals";
 import { project, undo, redo, canUndo, canRedo } from "@/state/store";
+import { addSampleFontAsBaseLayer } from "@/state/bootstrap";
 import { currentView } from "@/state/ui-state";
 import { compose } from "@/compositor/compose";
 import { writeBmp24 } from "@/encoders/bmp";
@@ -18,6 +20,19 @@ import { DecorationStub } from "@/ui/decoration/DecorationStub";
 export function AppShell() {
   const { assets } = useResolvedAssets();
   const hasLayers = useComputed(() => project.value.font.layers.length > 0);
+
+  // First-run bootstrap: if the project is completely empty on mount, seed it
+  // with the MIT-safe ondrascz sample so the canvas has something to render
+  // instead of a blank chroma-gray atlas. When persistence lands (v0.3.x) this
+  // check will move to a `meta.initialized` flag so we don't clobber returning
+  // users' saved projects.
+  useEffect(() => {
+    if (project.value.font.layers.length === 0) {
+      addSampleFontAsBaseLayer("ondrascz-color.bmp", "ondrascz color (default)").catch(
+        (err) => console.error("auto-bootstrap failed:", err),
+      );
+    }
+  }, []);
 
   const downloadBmp = () => {
     const atlas = compose(project.value, assets.value);

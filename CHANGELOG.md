@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.6] - 2026-04-22
+
+### Changed
+
+- **TTF layer size** now accepts values up to **60** (was 40). The browser Canvas rasterizer handles the extra range fine; past ~60 the supersampled working canvas (`size * 8`) starts clipping characters, which is why the cap isn't higher yet.
+- **Auto-bootstrap on first visit**: when the app mounts with no font layers, the `ondrascz-color` sample is loaded automatically as the base. Canvas has something to render right away instead of a chroma-gray blank. The "Load sample" picker still works for swapping to a different starter. Behavior is conditional on `project.font.layers.length === 0` — when persistence lands in v0.3.x this will become a `meta.initialized` flag check so returning users aren't clobbered.
+- **`src/state/bootstrap.ts`** — shared `addSampleFontAsBaseLayer(filename, displayName)` helper. Both the `LayersPanel` "Load sample" button and the `AppShell` first-run bootstrap call through it; keeps behavior consistent.
+
+### Added — PLAN.md follow-up roadmap
+
+- New "Phase 2.x — Post-v0.2 follow-ups" section captures the queue of small user-requested improvements: **How-To tab** (in-app step-by-step guide for first-time visitors, sits next to Resources), HDZero library browser, logo/mini-logo uploader, MCM layer UI, project persistence across reloads, palette RNG seed control.
+
+### Bumped
+
+- `package.json` version `0.2.5` → `0.2.6`.
+
 ## [0.2.5] - 2026-04-22
 
 ### Added — Per-glyph color tints

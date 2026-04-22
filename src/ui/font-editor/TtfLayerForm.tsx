@@ -165,7 +165,7 @@ export function TtfLayerForm({ onClose, editing }: Props) {
       </label>
 
       <div class="grid grid-cols-3 gap-2">
-        <NumberField label="Size" value={size} step={1} min={10} max={40} onChange={setSize} />
+        <NumberField label="Size" value={size} step={1} min={10} max={60} onChange={setSize} />
         <NumberField
           label="Outline"
           value={outline}

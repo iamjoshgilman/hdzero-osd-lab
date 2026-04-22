@@ -334,6 +334,17 @@ Tracks A/B/C can ship in parallel behind clean interfaces; D integrates them.
 
 ---
 
+### Phase 2.x — Post-v0.2 follow-ups (v0.2.6+)
+
+User-requested papercut fixes and small wins that don't justify their own phase:
+
+- **How-To tab** — dedicated in-app guide with step-by-step directions for first-time visitors. Sits next to `Resources` in the top bar. Sections: "Your first font" (pick sample → drop icon override → download), "Bring your own TTF" (upload → palette → apply per-glyph tints), "Design an OSD screenshot" (layout → bg image → share). All static content, no state. Replaces the need for a modal tutorial popup — discoverable at any time, not intrusive.
+- **HDZero library browser** — fetch-and-preview community BTFL fonts inline (github.com/hd-zero/hdzero-osd-font-library) without leaving the app.
+- **Logo / mini-logo uploader** — drag a PNG onto the BTFL logo slot or the 120×36 mini-logo zone; compositor already supports both via `-btfllogo`-equivalent code paths.
+- **MCM layer UI** — plug the existing `parseMcm` loader into a layer form so users can overlay analog OSD fonts the same way they can TTFs.
+- **Project persistence across reloads** — write the `ProjectDoc` + asset manifest to IndexedDB on every mutate (not just assets). Lets the auto-bootstrap sample load only on truly first visit instead of every page load.
+- **Seed control for palette layers** — UI for `project.meta.rngSeed` so users can lock a pleasing random roll reproducibly, or shuffle until one looks good.
+
 ### Phase 4 — v1.0 "Polish, Sharing, Docs"
 
 **Goal.** A launchable public release.

@@ -5,6 +5,7 @@ import { useComputed } from "@preact/signals";
 import { useRef, useState } from "preact/hooks";
 import { project, mutate } from "@/state/store";
 import { putAsset } from "@/state/assets";
+import { addSampleFontAsBaseLayer } from "@/state/bootstrap";
 import { selectedGlyph } from "@/state/ui-state";
 import { FileDrop } from "@/ui/shared/FileDrop";
 import { Button } from "@/ui/shared/Button";
@@ -35,22 +36,11 @@ export function LayersPanel() {
   };
 
   const loadSample = async (filename: string, displayName: string) => {
-    const res = await fetch(`${import.meta.env.BASE_URL}sample-fonts/${filename}`);
-    if (!res.ok) {
-      alert(`Could not load sample font ${filename} (HTTP ${res.status})`);
-      return;
+    try {
+      await addSampleFontAsBaseLayer(filename, displayName);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
     }
-    const buf = await res.arrayBuffer();
-    const hash = await putAsset(buf, { name: displayName, mime: "image/bmp" });
-    mutate((doc) => {
-      doc.font.layers.push({
-        id: `base-${Date.now()}`,
-        kind: "bitmap",
-        source: { kind: "user", hash, name: displayName, mime: "image/bmp" },
-        subset: "ALL",
-        enabled: true,
-      });
-    });
   };
 
   const toggleLayer = (id: string) => {

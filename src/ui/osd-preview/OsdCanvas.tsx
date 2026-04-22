@@ -401,7 +401,11 @@ export function OsdCanvas() {
     }
     mutate((doc) => {
       const existing = doc.osdLayout.elements[el.id];
+      // Spread `existing` first so `customText` and any future per-element
+      // fields survive a drag. Previously we rebuilt the entry with just
+      // {x, y, enabled} and silently wiped the user's typed text.
       doc.osdLayout.elements[el.id] = {
+        ...(existing ?? {}),
         x: d.col,
         y: d.row,
         enabled: existing ? existing.enabled : el.defaultEnabled,

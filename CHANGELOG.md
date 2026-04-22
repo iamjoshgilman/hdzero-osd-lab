@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.15] - 2026-04-22
+
+### Fixed
+
+- **Dragging an OSD element wiped its `customText`.** The drag-commit mutation rebuilt the element entry with just `{x, y, enabled}`, so any per-element state (Craft Name text, Pilot Name text, Custom Messages) silently reverted to the schema sample when the element was moved. Now spreads `...existing` first so all fields survive a drag. Also future-proofed against any new per-element fields getting silently nuked the same way.
+
+### Bumped
+
+- `package.json` version `0.2.14` → `0.2.15`.
+
 ## [0.2.14] - 2026-04-22
 
 ### Removed

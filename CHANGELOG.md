@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.1] - 2026-04-22
+
+### Added — Phase 2 OSD schema
+
+- `src/osd-schema/elements.ts` — data table of 33 common Betaflight OSD elements (craft name, RSSI, LQ, battery voltage, avg cell voltage, current, mAh, altitude, home dist/dir, GPS sats/speed/lat/lon, heading, compass bar, throttle, flymode, disarmed, warnings, crosshairs, flip arrow, flight time, on time, PID rows, temperature, blackbox log, etc). Each entry has an id matching the upstream `osd_items_e` enum, human label, category, default 53×20-grid position, enabled-by-default flag, and a `sample` glyph-code array that the live preview will blit (e.g. battery voltage's sample is `SYM_MAIN_BATT + "16.4" + SYM_VOLT` = 6 codes).
+- `src/osd-schema/elements.test.ts` — 8 cases covering count stability, grid-bounds invariants for every default position, horizontal fit at default, id uniqueness, category coverage, sample-code range invariants, and lookup by id.
+- `OSD_GRID` constant (53×20) — the HD OSD simulator dimensions.
+
+### Notes
+
+- This is the data layer of v0.2.0. Next two commits wire it into a live canvas renderer + draggable element library + FPV background. The v0.2.0 tag itself lands when the OSD tab has a working interactive preview.
+- Table covers the ~33 most-flown elements; the full Betaflight enum includes another ~70 entries (waypoints, goggle-side stats, lap timers) that are additive and can ship in v0.2.x patches without changing the schema shape.
+
 ## [0.1.8] - 2026-04-22
 
 ### Changed

@@ -2,3 +2,4 @@
 // elements. Reimplemented as data from publicly documented constants — no
 // Betaflight GPL code is copied.
 export * from "./symbols";
+export * from "./elements";

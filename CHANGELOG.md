@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-04-22
+
+### Changed
+
+- `FontPreview` default BG is now **Chroma-gray (raw)** instead of Dark. Looked better on inspection; the dark/navy/black options remain one click away in the toolbar dropdown.
+- `InspectorPanel` tile close-up renders chroma-gray as-is too, matching the preview canvas.
+
 ## [0.1.7] - 2026-04-21
 
 ### Removed

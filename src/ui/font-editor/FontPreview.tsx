@@ -44,7 +44,7 @@ export function FontPreview() {
   const [zoom, setZoom] = useState<number>(1);
   const [showGrid, setShowGrid] = useState<boolean>(false);
   const [showOverlay, setShowOverlay] = useState<boolean>(false);
-  const [bgMode, setBgMode] = useState<PreviewBg>("dark");
+  const [bgMode, setBgMode] = useState<PreviewBg>("chroma");
 
   const atlas = useComputed(() => compose(project.value, assets.value));
 

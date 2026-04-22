@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-04-21
+
+### Added
+
+- `currentView` signal in `src/state/ui-state.ts` tracks which major tab is active (`font` / `osd` / `decoration`).
+- `src/ui/shell/TabBar.tsx` — three-tab navigation between Font editor, OSD preview, and Decoration generator. Phase-tag badges (`v0.2`, `v0.3`) mark tabs whose full implementations are scheduled.
+- `src/ui/osd-preview/OsdPreviewStub.tsx` and `src/ui/decoration/DecorationStub.tsx` — placeholder screens for the in-flight tabs.
+- `AppShell` now renders the tab bar and switches content based on `currentView`. The global `LayersPanel` stays pinned on the left across tabs.
+
+### Notes
+
+- This is scaffolding only: OSD and Decoration tabs show placeholder screens. v0.2 fills OSD; v0.3 fills Decoration.
+- Background agents for OSD schema research and FPV background sourcing were launched but both stopped after discovering their sandbox denies network access. Doing that research directly in the main thread next.
+
 ## [0.1.1] - 2026-04-21
 
 ### Added

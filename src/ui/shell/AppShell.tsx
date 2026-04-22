@@ -1,5 +1,6 @@
 import { useComputed } from "@preact/signals";
 import { project, undo, redo, canUndo, canRedo } from "@/state/store";
+import { currentView } from "@/state/ui-state";
 import { compose } from "@/compositor/compose";
 import { writeBmp24 } from "@/encoders/bmp";
 import { FONT_SIZE } from "@/compositor/constants";
@@ -7,6 +8,9 @@ import { useResolvedAssets } from "@/ui/hooks/useResolvedAssets";
 import { Button } from "@/ui/shared/Button";
 import { LayersPanel } from "@/ui/font-editor/LayersPanel";
 import { FontPreview } from "@/ui/font-editor/FontPreview";
+import { TabBar } from "@/ui/shell/TabBar";
+import { OsdPreviewStub } from "@/ui/osd-preview/OsdPreviewStub";
+import { DecorationStub } from "@/ui/decoration/DecorationStub";
 
 export function AppShell() {
   const { assets } = useResolvedAssets();
@@ -24,13 +28,19 @@ export function AppShell() {
     URL.revokeObjectURL(url);
   };
 
+  const view = useComputed(() => currentView.value);
+
   return (
     <div class="flex flex-col h-full bg-slate-950 text-slate-100">
       <TopBar onDownload={downloadBmp} canDownload={hasLayers.value} />
+      <TabBar />
       <main class="flex flex-1 overflow-hidden">
+        {/* Layers panel is global across tabs — font composition is the foundation. */}
         <LayersPanel />
         <section class="flex-1 overflow-auto p-6 flex justify-center">
-          <FontPreview />
+          {view.value === "font" && <FontPreview />}
+          {view.value === "osd" && <OsdPreviewStub />}
+          {view.value === "decoration" && <DecorationStub />}
         </section>
       </main>
       <StatusBar />

@@ -5,3 +5,7 @@ import { signal } from "@preact/signals";
 
 /** Currently-selected glyph code (0..511), or null if nothing's selected. */
 export const selectedGlyph = signal<number | null>(null);
+
+/** Which major workspace tab is visible. */
+export type ViewMode = "font" | "osd" | "decoration";
+export const currentView = signal<ViewMode>("font");

@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.4] - 2026-04-22
+
+### Added — FPV background image
+
+- `ProjectDoc.osdLayout.background` (optional `AssetRef`) — the OSD preview can now carry a user-supplied FPV still frame that persists via IndexedDB across reloads, same storage path as font bitmaps.
+- `useResolvedAssets` now also decodes the background image to an `ImageBitmap` and exposes it as a `bgImage` signal. Cleans up prior bitmaps on replacement to avoid leaks.
+- `OsdCanvas` draws the FPV image first (cover-fit, preserves aspect) then the solid-color fallback is behind it, then the OSD elements on top — matches how real goggles composite the font over video. Chroma-gray in the atlas stays alpha-cleared so the FPV image shows through where the OSD would be transparent.
+- **Dim slider** (0–85%) appears in the OSD toolbar whenever a bg image is loaded. Pulls the FPV footage down toward black so the OSD text reads cleanly against bright backgrounds.
+- `ElementLibrary` gained an "FPV background" section: drop zone to upload, preview of the current file name, Replace / Clear buttons.
+
+### Notes
+
+- Next: v0.2.0 final polish pass — maybe an "element-under-cursor" hover status, a couple of BF-style layout presets, and any last papercuts. Then the tag.
+
 ## [0.2.0-alpha.3] - 2026-04-22
 
 ### Added — Interactive OSD layout editor

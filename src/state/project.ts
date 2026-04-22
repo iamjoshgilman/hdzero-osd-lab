@@ -30,6 +30,8 @@ export interface ProjectDoc {
   osdLayout: {
     /** Betaflight OSD element layout — user's in-flight positions, not the font. */
     elements: Record<ElementId, { x: number; y: number; enabled: boolean }>;
+    /** Optional FPV still-frame rendered behind the OSD preview. */
+    background?: AssetRef;
   };
   decorations: {
     craftName: CraftNameDecoration;

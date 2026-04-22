@@ -4,6 +4,7 @@
 
 import { useComputed } from "@preact/signals";
 import { project, mutate } from "@/state/store";
+import { putAsset } from "@/state/assets";
 import { selectedOsdElement } from "@/state/ui-state";
 import {
   OSD_ELEMENTS,
@@ -11,6 +12,7 @@ import {
   type OsdElementCategory,
 } from "@/osd-schema/elements";
 import { Button } from "@/ui/shared/Button";
+import { FileDrop } from "@/ui/shared/FileDrop";
 
 const CATEGORY_ORDER: readonly OsdElementCategory[] = [
   "rc",
@@ -67,10 +69,33 @@ function enableAll(enabled: boolean): void {
   });
 }
 
+async function setBackgroundImage(file: File): Promise<void> {
+  const buf = await file.arrayBuffer();
+  const hash = await putAsset(buf, {
+    name: file.name,
+    mime: file.type || "image/png",
+  });
+  mutate((doc) => {
+    doc.osdLayout.background = {
+      kind: "user",
+      hash,
+      name: file.name,
+      mime: file.type || "image/png",
+    };
+  });
+}
+
+function clearBackgroundImage(): void {
+  mutate((doc) => {
+    delete doc.osdLayout.background;
+  });
+}
+
 export function ElementLibrary() {
   // Re-render any time project or selection changes.
   const selected = useComputed(() => selectedOsdElement.value);
   const enabledCount = useComputed(() => OSD_ELEMENTS.filter(effectiveEnabled).length);
+  const bg = useComputed(() => project.value.osdLayout.background);
 
   const grouped: Record<OsdElementCategory, OsdElement[]> = {
     rc: [],
@@ -115,6 +140,39 @@ export function ElementLibrary() {
         Drag any element on the canvas to reposition. Click an element here or on the canvas
         to highlight it. Toggle the checkbox to show/hide in the simulated OSD.
       </p>
+
+      <section>
+        <h3 class="text-[10px] uppercase tracking-wider text-slate-500 mb-1">
+          FPV background
+        </h3>
+        {bg.value && bg.value.kind === "user" ? (
+          <div class="flex flex-col gap-1 bg-slate-800 rounded p-2">
+            <span class="text-[11px] truncate text-slate-200">{bg.value.name}</span>
+            <div class="flex gap-2">
+              <FileDrop
+                accept="image/*"
+                label="Replace"
+                onFile={setBackgroundImage}
+                class="!p-2 !text-[10px] flex-1"
+              />
+              <Button
+                variant="danger"
+                onClick={clearBackgroundImage}
+                class="!px-2 !py-1 !text-[10px]"
+              >
+                Clear
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <FileDrop
+            accept="image/*"
+            label="Drop an FPV still frame"
+            onFile={setBackgroundImage}
+            class="!p-3 !text-[11px]"
+          />
+        )}
+      </section>
 
       {CATEGORY_ORDER.map((cat) => {
         const items = grouped[cat];

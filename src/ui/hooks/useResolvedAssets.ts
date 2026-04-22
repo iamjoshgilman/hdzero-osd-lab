@@ -19,12 +19,15 @@ export interface ResolvedAssetsState {
   assets: Signal<ResolvedAssets>;
   loading: Signal<boolean>;
   error: Signal<string | null>;
+  /** OSD-preview background image, if the project has one. */
+  bgImage: Signal<ImageBitmap | null>;
 }
 
 const state: ResolvedAssetsState = {
   assets: signal<ResolvedAssets>(emptyResolvedAssets()),
   loading: signal<boolean>(false),
   error: signal<string | null>(null),
+  bgImage: signal<ImageBitmap | null>(null),
 };
 
 /**
@@ -46,6 +49,7 @@ export function useResolvedAssets(): ResolvedAssetsState {
         if (!cancelled) {
           state.assets.value = next;
         }
+        await syncBgImage(doc, cancelled);
       } catch (err) {
         if (!cancelled) {
           state.error.value = err instanceof Error ? err.message : String(err);
@@ -53,6 +57,27 @@ export function useResolvedAssets(): ResolvedAssetsState {
       } finally {
         if (!cancelled) state.loading.value = false;
       }
+    };
+
+    const syncBgImage = async (doc: ProjectDoc, wasCancelled: boolean) => {
+      const ref = doc.osdLayout.background;
+      if (!ref || ref.kind !== "user") {
+        if (!wasCancelled) {
+          state.bgImage.value?.close?.();
+          state.bgImage.value = null;
+        }
+        return;
+      }
+      const rec = await getAsset(ref.hash);
+      if (!rec || wasCancelled) return;
+      const blob = new Blob([rec.bytes], { type: rec.mime });
+      const bitmap = await createImageBitmap(blob);
+      if (wasCancelled) {
+        bitmap.close();
+        return;
+      }
+      state.bgImage.value?.close?.();
+      state.bgImage.value = bitmap;
     };
 
     run(project.value);

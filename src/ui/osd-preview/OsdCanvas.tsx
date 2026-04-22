@@ -57,7 +57,7 @@ interface DragState {
 }
 
 export function OsdCanvas() {
-  const { assets, loading, error } = useResolvedAssets();
+  const { assets, loading, error, bgImage } = useResolvedAssets();
   const atlas = useComputed(() => compose(project.value, assets.value));
   const selected = useComputed(() => selectedOsdElement.value);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -65,6 +65,7 @@ export function OsdCanvas() {
   const [drag, setDrag] = useState<DragState | null>(null);
   const [bg, setBg] = useState<BgKey>("chroma");
   const [fitWidth, setFitWidth] = useState<boolean>(true);
+  const [bgDim, setBgDim] = useState<number>(0); // 0..1 darkening overlay over bg image
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -75,9 +76,35 @@ export function OsdCanvas() {
     canvas.width = OSD_W_PX;
     canvas.height = OSD_H_PX;
 
-    // Background fill
+    // Background: solid color, with optional FPV image on top.
     ctx.fillStyle = BG_OPTIONS[bg].rgb;
     ctx.fillRect(0, 0, OSD_W_PX, OSD_H_PX);
+    const img = bgImage.value;
+    if (img) {
+      // Cover-fit: preserve aspect, fill the frame. Matches how FPV footage
+      // would look framed by the goggles.
+      const srcAR = img.width / img.height;
+      const dstAR = OSD_W_PX / OSD_H_PX;
+      let sx = 0;
+      let sy = 0;
+      let sw = img.width;
+      let sh = img.height;
+      if (srcAR > dstAR) {
+        // Source is wider than dst — crop horizontally.
+        const newW = img.height * dstAR;
+        sx = (img.width - newW) / 2;
+        sw = newW;
+      } else {
+        const newH = img.width / dstAR;
+        sy = (img.height - newH) / 2;
+        sh = newH;
+      }
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, OSD_W_PX, OSD_H_PX);
+      if (bgDim > 0) {
+        ctx.fillStyle = `rgba(0, 0, 0, ${bgDim})`;
+        ctx.fillRect(0, 0, OSD_W_PX, OSD_H_PX);
+      }
+    }
 
     // Turn the composed RGB atlas into an ImageData we can sample from.
     const rgba = rgbToRgba(atlas.value);
@@ -151,7 +178,7 @@ export function OsdCanvas() {
         }
       }
     }
-  }, [atlas.value, bg, drag, selected.value]);
+  }, [atlas.value, bg, drag, selected.value, bgImage.value, bgDim]);
 
   /** Map a pointer event to grid (col, row). */
   const pointerToCell = (e: PointerEvent): { col: number; row: number } | null => {
@@ -282,6 +309,20 @@ export function OsdCanvas() {
           />
           <span>Fit width</span>
         </label>
+        {bgImage.value && (
+          <label class="flex items-center gap-2">
+            <span>Dim</span>
+            <input
+              type="range"
+              min="0"
+              max="0.85"
+              step="0.05"
+              value={bgDim}
+              onInput={(e: Event) => setBgDim(parseFloat((e.target as HTMLInputElement).value))}
+            />
+            <span>{Math.round(bgDim * 100)}%</span>
+          </label>
+        )}
         {loading.value && <span class="text-osd-amber">Loading assets…</span>}
         {error.value && <span class="text-osd-alert">{error.value}</span>}
       </div>

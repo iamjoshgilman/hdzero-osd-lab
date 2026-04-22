@@ -17,6 +17,11 @@ interface LogoSlotSpec {
   purpose: string;
 }
 
+// INAV logo slot is supported by the compositor (LogoLayer kind="inav") and
+// stays in the data model so existing INAV projects don't break. It's just
+// hidden from the Decoration page UI since the vast majority of HDZero users
+// fly Betaflight. If demand shows up, we can re-add a collapsed "advanced"
+// section.
 const LOGO_SLOTS: readonly LogoSlotSpec[] = [
   {
     slot: "btfl",
@@ -33,14 +38,6 @@ const LOGO_SLOTS: readonly LogoSlotSpec[] = [
     renderedAt: "Anywhere via Craft Name `[\\]^_`",
     purpose:
       "A 5-tile inline logo (glyph codes 91..95). Render it in flight by setting your Betaflight Craft Name to the five characters `[\\]^_`.",
-  },
-  {
-    slot: "inav",
-    label: "INAV Logo",
-    dims: { w: 240, h: 144 },
-    renderedAt: "INAV firmware only",
-    purpose:
-      "Same concept as the BTFL banner but for INAV flight controllers. Uses glyph codes 257..296. Ignored by Betaflight firmware.",
   },
 ];
 

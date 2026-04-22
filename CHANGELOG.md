@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.14] - 2026-04-22
+
+### Removed
+
+- INAV logo slot from the Decoration page UI. Almost no HDZero freestyle pilots fly INAV — the slot was page clutter for the common case. **Compositor support stays intact**: `LogoLayer.slot === "inav"` still renders correctly, projects with existing INAV logos will still compose. We just stopped exposing the uploader on the Decoration page. If demand shows up, trivial to re-add as a collapsed "advanced" section.
+
+### Bumped
+
+- `package.json` version `0.2.13` → `0.2.14`.
+
 ## [0.2.13] - 2026-04-22
 
 ### Added — Banner element in OSD preview + realism toggle

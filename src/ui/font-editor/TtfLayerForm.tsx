@@ -1,5 +1,5 @@
-// Inline form for adding a TTF layer to the current project. Mirrors the
-// Python fork's CLI args (size / outline thickness / vertical stretch /
+// Inline form for adding a new TTF layer OR editing an existing one. Mirrors
+// the Python fork's CLI args (size / outline thickness / vertical stretch /
 // colors) with a first-class comma-separated palette input so the headline
 // "random color per glyph" feature is discoverable.
 
@@ -29,16 +29,35 @@ const WHITERQBBIT_PALETTE = "#00FFAA,#00FFFF,#FF00FF,#FFB000";
 
 interface Props {
   onClose: () => void;
+  /** If set, the form is editing this existing layer instead of creating a new one. */
+  editing?: TtfLayer;
 }
 
-export function TtfLayerForm({ onClose }: Props) {
-  const [pending, setPending] = useState<PendingTtf | null>(null);
-  const [subset, setSubset] = useState<SubsetName>("BTFL_LETTERS");
-  const [size, setSize] = useState<number>(22);
-  const [outline, setOutline] = useState<number>(1.0);
-  const [vStretch, setVStretch] = useState<number>(1.0);
-  const [glyphColor, setGlyphColor] = useState<string>("#E0E0E0");
-  const [outlineColor, setOutlineColor] = useState<string>("#000000");
+/** Convert a single hex or palette back to the text-input form the user typed. */
+function colorToInput(c: HexColor | HexColor[]): string {
+  return Array.isArray(c) ? c.join(",") : c;
+}
+
+export function TtfLayerForm({ onClose, editing }: Props) {
+  const [pending, setPending] = useState<PendingTtf | null>(
+    editing
+      ? {
+          hash: editing.source.kind === "user" ? editing.source.hash : "",
+          name: editing.source.kind === "user" ? editing.source.name : editing.source.id,
+          mime: editing.source.kind === "user" ? editing.source.mime : "font/ttf",
+        }
+      : null,
+  );
+  const [subset, setSubset] = useState<SubsetName>(editing?.subset ?? "BTFL_LETTERS");
+  const [size, setSize] = useState<number>(editing?.size ?? 22);
+  const [outline, setOutline] = useState<number>(editing?.outlineThickness ?? 1.0);
+  const [vStretch, setVStretch] = useState<number>(editing?.vStretch ?? 1.0);
+  const [glyphColor, setGlyphColor] = useState<string>(
+    editing ? colorToInput(editing.glyphColor) : "#E0E0E0",
+  );
+  const [outlineColor, setOutlineColor] = useState<string>(
+    editing ? colorToInput(editing.outlineColor) : "#000000",
+  );
   const [busy, setBusy] = useState<boolean>(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -68,10 +87,10 @@ export function TtfLayerForm({ onClose }: Props) {
     return asHex.length === 1 ? asHex[0]! : asHex;
   };
 
-  const addLayer = () => {
+  const saveLayer = () => {
     if (!pending) return;
-    const layer: TtfLayer = {
-      id: `ttf-${Date.now()}`,
+    const base: TtfLayer = {
+      id: editing?.id ?? `ttf-${Date.now()}`,
       kind: "ttf",
       source: {
         kind: "user",
@@ -83,15 +102,20 @@ export function TtfLayerForm({ onClose }: Props) {
       size,
       outlineThickness: outline,
       vStretch,
-      glyphOffset: { x: 0, y: 0 },
-      outlineOffset: { x: 0, y: 0 },
+      glyphOffset: editing?.glyphOffset ?? { x: 0, y: 0 },
+      outlineOffset: editing?.outlineOffset ?? { x: 0, y: 0 },
       glyphColor: parseColor(glyphColor),
       outlineColor: parseColor(outlineColor),
-      superSampling: 8,
-      enabled: true,
+      superSampling: editing?.superSampling ?? 8,
+      enabled: editing?.enabled ?? true,
     };
     mutate((doc) => {
-      doc.font.layers.push(layer);
+      if (editing) {
+        const idx = doc.font.layers.findIndex((l) => l.id === editing.id);
+        if (idx >= 0) doc.font.layers[idx] = base;
+      } else {
+        doc.font.layers.push(base);
+      }
     });
     onClose();
   };
@@ -99,7 +123,9 @@ export function TtfLayerForm({ onClose }: Props) {
   return (
     <div class="bg-slate-800/80 border border-slate-700 rounded p-3 flex flex-col gap-3 font-mono text-xs">
       <header class="flex items-center justify-between">
-        <h3 class="text-osd-cyan text-[11px] font-semibold">Add TTF layer</h3>
+        <h3 class="text-osd-cyan text-[11px] font-semibold">
+          {editing ? "Edit TTF layer" : "Add TTF layer"}
+        </h3>
         <button class="text-slate-500 hover:text-slate-300 text-[10px]" onClick={onClose}>
           close
         </button>
@@ -118,7 +144,7 @@ export function TtfLayerForm({ onClose }: Props) {
             class="text-slate-500 hover:text-slate-300 text-[10px]"
             onClick={() => setPending(null)}
           >
-            change
+            {editing ? "replace file" : "change"}
           </button>
         </div>
       )}
@@ -192,11 +218,11 @@ export function TtfLayerForm({ onClose }: Props) {
       <div class="flex gap-2">
         <Button
           variant="primary"
-          onClick={addLayer}
+          onClick={saveLayer}
           disabled={!pending}
           class="flex-1 !text-xs"
         >
-          Add layer
+          {editing ? "Save changes" : "Add layer"}
         </Button>
         <Button variant="secondary" onClick={onClose} class="!text-xs">
           Cancel

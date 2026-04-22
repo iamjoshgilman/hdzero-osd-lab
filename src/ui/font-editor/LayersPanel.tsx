@@ -17,6 +17,7 @@ export function LayersPanel() {
   const overrideEntries = useComputed(() => Object.entries(project.value.font.overrides));
   const { layerErrors, loading } = useResolvedAssets();
   const [ttfFormOpen, setTtfFormOpen] = useState<boolean>(false);
+  const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
 
   const addBaseBmp = async (file: File) => {
     const buf = await file.arrayBuffer();
@@ -100,17 +101,38 @@ export function LayersPanel() {
           </h2>
           <Button
             variant="secondary"
-            onClick={() => setTtfFormOpen((x) => !x)}
+            onClick={() => {
+              setEditingLayerId(null);
+              setTtfFormOpen((x) => !x);
+            }}
             class="!px-2 !py-1 !text-[10px]"
           >
-            {ttfFormOpen ? "− TTF" : "+ TTF"}
+            {ttfFormOpen && !editingLayerId ? "− TTF" : "+ TTF"}
           </Button>
         </div>
-        {ttfFormOpen && (
+        {ttfFormOpen && !editingLayerId && (
           <div class="mb-3">
             <TtfLayerForm onClose={() => setTtfFormOpen(false)} />
           </div>
         )}
+        {editingLayerId &&
+          (() => {
+            const editing = layers.value.find(
+              (l) => l.id === editingLayerId && l.kind === "ttf",
+            );
+            if (!editing || editing.kind !== "ttf") return null;
+            return (
+              <div class="mb-3">
+                <TtfLayerForm
+                  editing={editing}
+                  onClose={() => {
+                    setEditingLayerId(null);
+                    setTtfFormOpen(false);
+                  }}
+                />
+              </div>
+            );
+          })()}
         {layers.value.length === 0 && (
           <p class="text-xs text-slate-500">Upload a base font above or add a TTF layer to get started.</p>
         )}
@@ -137,6 +159,21 @@ export function LayersPanel() {
                       / {layer.kind === "logo" ? layer.slot : layer.subset}
                     </span>
                   </span>
+                  {layer.kind === "ttf" && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setTtfFormOpen(false);
+                        setEditingLayerId(
+                          editingLayerId === layer.id ? null : layer.id,
+                        );
+                      }}
+                      class="!px-2 !py-1"
+                      title="Edit layer settings"
+                    >
+                      ✎
+                    </Button>
+                  )}
                   <Button
                     variant="danger"
                     onClick={() => removeLayer(layer.id)}

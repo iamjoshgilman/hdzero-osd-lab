@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-04-22
+
+### Added — Edit existing TTF layers
+
+- Each TTF layer row in the LayersPanel now has a **✎ edit** button next to the × delete button. Clicking it opens the same TTF form inline, pre-filled with that layer's current settings, so users can tweak size / outline / vStretch / glyph & outline colors / palette without re-uploading the font file.
+- Save replaces the layer in place (same id, same asset) so the compositor re-renders with the new config. Cancel leaves the layer untouched.
+- The "+ TTF" button is context-aware: it toggles the create form and closes any in-progress edit; the edit form closes any in-progress create. Single active form at a time.
+
+### Notes — deferred per-glyph features
+
+User also asked for per-glyph edits within a layer ("change just that letter, or just that color"). That splits into two separate data-model changes we'll ship later:
+
+- **Per-glyph character override** — user selects code 65 (A) and types a replacement character to render there instead. Today this is partially achievable via the existing `-glyph` image-override mechanism (render 'Z' to a PNG somewhere, override code 65 with it), but a native "just type a letter" shortcut would be cleaner.
+- **Per-glyph color pin in a palette layer** — in a palette TTF layer, lock specific codes to specific colors while the rest stay random. Needs a `TtfLayer.pinnedColors: Record<number, HexColor>` addition and a click-to-pin UI.
+
+Both are v0.2.5+ — the design for pinning interacts with the RNG seed story and deserves its own commit.
+
+### Bumped
+
+- `package.json` version `0.2.3` → `0.2.4`.
+
 ## [0.2.3] - 2026-04-22
 
 ### Fixed

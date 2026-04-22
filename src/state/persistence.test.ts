@@ -42,4 +42,23 @@ describe("projectToJson / projectFromJson", () => {
     const bad = JSON.stringify({ schemaVersion: 1, meta: {} });
     expect(() => projectFromJson(bad)).toThrow(/missing/);
   });
+
+  it("round-trips the mode field", () => {
+    const p = createDefaultProject();
+    p.meta.mode = "analog";
+    const back = projectFromJson(projectToJson(p));
+    expect(back.meta.mode).toBe("analog");
+  });
+
+  it("auto-migrates pre-v0.3.0 projects (no mode field) to hd", () => {
+    // Simulate an old saved project written before the mode field existed.
+    // Hand-build the JSON to avoid the TS type requiring mode.
+    const p = createDefaultProject();
+    const json = projectToJson(p);
+    const parsed = JSON.parse(json) as { meta: Record<string, unknown> };
+    delete parsed.meta.mode;
+    const legacyJson = JSON.stringify(parsed);
+    const back = projectFromJson(legacyJson);
+    expect(back.meta.mode).toBe("hd");
+  });
 });

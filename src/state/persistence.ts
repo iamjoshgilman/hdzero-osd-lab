@@ -14,6 +14,11 @@ export function projectToJson(doc: ProjectDoc): string {
 /**
  * Parse a JSON string back into a ProjectDoc. Validates `schemaVersion`;
  * future schema bumps will dispatch to a migration here.
+ *
+ * Auto-migrates pre-v0.3.0 projects by filling `meta.mode = "hd"` if
+ * absent. This is NOT a schemaVersion bump because the field defaults
+ * cleanly — every old project was HD by definition since analog didn't
+ * exist as a concept.
  */
 export function projectFromJson(json: string): ProjectDoc {
   const parsed: unknown = JSON.parse(json);
@@ -29,6 +34,11 @@ export function projectFromJson(json: string): ProjectDoc {
   }
   if (!doc.meta || !doc.font || !doc.osdLayout || !doc.decorations) {
     throw new Error("projectFromJson: missing required top-level fields");
+  }
+  // Auto-migrate: older saved projects predate the mode field. They were
+  // all HD-targeted by definition since analog didn't exist yet.
+  if (!("mode" in doc.meta) || doc.meta.mode === undefined) {
+    (doc.meta as ProjectDoc["meta"]).mode = "hd";
   }
   return doc as ProjectDoc;
 }

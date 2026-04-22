@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-04-22 — Phase 3 "Analog mode" complete
+
+### Added — Analog (MAX7456) mode
+
+The tool now builds either HDZero HD fonts or analog MAX7456 fonts. Pilots pick their target with a toggle above the base-font drop; the whole UI re-themes to a CRT-phosphor aesthetic, file types and dimensions gate per mode, and the download format swaps between `.bmp` and `.mcm`. Modes are fully isolated — work on an HD build and an analog build in parallel, switch back and forth, nothing bleeds.
+
+Primary analog workflow: drop a `.mcm`, build on top with MCM/TTF layers + glyph overrides + logo uploaders at half HD dimensions, position OSD elements on a 30×16 grid over an FPV background, download a new `.mcm` ready to flash from Betaflight Configurator's Font Manager.
+
+**Architecture — parallel paths, shared primitives:**
+
+- `src/compositor/constants.ts` — `ANALOG_GLYPH_SIZE` (12×18), `ANALOG_GLYPH_COUNT` (256), `ANALOG_FONT_GRID` (16×16), `ANALOG_FONT_SIZE` (192×288), `ANALOG_OSD_GRID` (30×16), `ANALOG_LOGO_SIZE` (half of HD's for both btfl and mini slots). Plus `analogCodeToOrigin()` mirroring HD's `codeToOrigin`.
+- `src/compositor/atlas.ts` — parallel `createAnalogAtlas`, `blitAnalogTile`, `extractAnalogTile`, `tintAnalogTileInPlace`. HD primitives untouched.
+- `src/compositor/compose.ts` — top-level `compose()` dispatches on `project.meta.mode`. `composeHd` is the existing logic renamed; `composeAnalog` handles MCM layers, TTF layers rendered at 12×18, PNG glyph overrides at 12×18, logo layers (mini-logo + BTFL banner tiles at halved dimensions), and tints. The bitmap layer kind no-ops in analog (no BMP format there).
+- `src/loaders/mcm.ts` — split into `parseMcm` (existing, 2×-upscaled to HD) and new `parseMcmNative` (native 12×18 for analog mode). `parseMcm` is now a thin wrapper over `parseMcmNative` + the upscale step — they can't desync.
+- `src/loaders/ttf.ts` — `rasterizeTtfSubset` now takes an optional `targetSize`. `useResolvedAssets` passes `ANALOG_GLYPH_SIZE` when mode is analog, producing crisp native-res TTF glyphs.
+- `src/loaders/image-to-tile.ts` — `imageRgbaToTile` now takes an optional `targetSize`. PNG glyph overrides and logo uploads scale to 12×18 / halved dimensions in analog.
+- `src/encoders/mcm.ts` — new `writeMcm(TileMap) → string` encoder. Inverse of `parseMcmNative`, emits standard MAX7456 ASCII with the magic header plus 256 × 64 lines. `pixelToBits` maps arbitrary RGB to the 3-state bit pair (chroma-gray → transparent, luma < 128 → outline, else → glyph fill) so color leaking in from any source flattens to legal 2-bit output.
+
+**Schema — mode isolation via font archive:**
+
+- `src/state/project.ts` — new `OsdMode = "hd" | "analog"` type and required `ProjectDoc.meta.mode` field. Pre-v0.3.0 projects auto-migrate to HD on load.
+- New `fontArchive?: { hd?: FontSlice; analog?: FontSlice }` field. When `ModeToggle` flips modes, `switchMode()` archives the current `font` slice under its mode key and swaps in the other mode's archived slice (or a blank). So `doc.font` always represents the currently-active mode's composition — every downstream consumer keeps reading `doc.font` with zero code changes. Two independent projects in one doc.
+- Separate `osdLayout.elementsAnalog` map for analog-mode OSD element positions. HD (53×20) and analog (30×16) have different spatial budgets; each mode keeps its own drag-customized layout.
+
+**UI — mode toggle + CRT-phosphor theme:**
+
+- `src/ui/shared/ModeToggle.tsx` — segmented HDZero / Analog switch rendered in the Font tab's left panel, above the base-font drop. Shows each mode's identity: "digital · 53×20 · .bmp" / "MAX7456 · 30×16 · .mcm".
+- **Theme swap** — not just accent colors. `:root[data-mode="analog"]` flips all five accents to a phosphor-green palette (`#39ff14` primary, dimmer green secondary, pale-phosphor highlights, warm amber kept for tips), AND rewrites every `bg-slate-950` / `bg-slate-900` / `bg-slate-800` / border-slate to cool-black / faint-green-black neutrals. Commits to the CRT aesthetic rather than just retint. Tailwind's `text-osd-*` / `bg-osd-*` classes resolve through CSS custom properties, so every styled element re-themes without per-file migration.
+- **Title swaps** — `hdzero-osd-lab` in HD → `analog-osd-lab` in analog.
+- **Font tab** — layers panel: base-drop accept list branches on mode (analog: `.mcm` only), sample dropdown HD-only, tooltip on `+ TTF` explains the 12×18 pixel-font expectation in analog. TTF form shows an analog-mode help block recommending Press Start 2P / PixelOperator / Minogram plus "try Size 10–14". Font preview: canvas dimensions, glyph size, grid overlay, click-to-select all adapt; empty-state copy swaps per mode. Category overlay hidden in analog (the glyph-metadata table is HD-shaped). Zoom is stored **per mode** so switching doesn't carry a 2× analog zoom onto the HD canvas.
+- **OSD Preview tab** — renders the mode-appropriate grid. Drag clamping, hit-testing, atlas sprite source all use mode-aware dimensions. `ANALOG_DEFAULT_POSITIONS` map provides a sensible 10-element starter layout for analog (RSSI+LQ top-left, battery stack bottom-left, altitude+timer bottom-right, flight-mode + warnings + crosshairs center) — pilots opt in to more elements and drag them where they want, instead of opening to HD defaults clipping into the smaller grid.
+- **Decoration tab** — both logo uploaders (BTFL banner + mini-logo) work in both modes now, with pixel dimensions that swap: 576×144 / 120×36 in HD, 288×72 / 60×18 in analog. Mini-logo is identical in both modes (same Craft Name `[\]^_` trick). BTFL banner tiles land at codes 160..255 in both modes; in analog, on-goggle display requires triggering via Craft Name / Warning text since analog firmware has no `SYM_LOGO` element. The tab header notes this asymmetry.
+- **How-To tab** — amber callout at the top in analog mode setting expectations. New "Install on analog (MAX7456 FCs)" section walking through the Configurator Font Manager flow; shown only in analog. The HDZero SD-card install section now shows only in HD mode. "Your first font" section rewritten around the mode-pick step.
+- **Top bar download** — label and handler branch on mode. HD writes `BTFL_000.bmp` at the HDZero-expected filename; analog writes `{project-name}.mcm` via the new encoder, sourced by extracting 256 tiles back out of the composed 192×288 atlas.
+
+### Hidden in analog (features that don't apply)
+
+- **Color tints** (per-glyph `TintEditor` in the Glyph Inspector) — MAX7456 is 2-bit monochrome, nothing between black/white/transparent. Tints would preview as color but flatten to monochrome on export, misleading the pilot. Hidden entirely.
+- **MCM layer glyph / outline color pickers** — same reason. Analog saves force white/black so the preview matches what the goggle renders.
+
+### Fixed (shipped alongside the analog work)
+
+- **FileDrop file-input doesn't re-fire `change` for the same file.** Classic browser quirk. Clearing `input.value` after each drop so uploading the same `.mcm` into both HD and analog modes (or re-uploading after removing a layer) works. Drag-and-drop already worked; this was the click-to-pick path.
+- **`⌫ New` button is now mode-scoped.** Previously wiped the whole `ProjectDoc` including the other mode's archive. Now clears only the active mode's `font` slice + that mode's OSD layout map; the other mode's archived work survives, and `meta.mode` itself is preserved (no kick back to HD from analog).
+- **Zoom persists across tab switches and mode switches separately.** Fixed in two steps: first lifted zoom to a signal so switching tabs doesn't unmount it (reported as a general annoyance); then split the signal per mode so an analog 2× zoom doesn't drag HD along at 2×.
+
+### Tests
+
+148 → 182. New cases cover native MCM parse, MCM encoder + round-trip, analog compose (atlas size + layer dispatch + override mismatch behavior), mode field round-trip + migration, `switchMode` isolation, `imageRgbaToTile` analog target. All 21 test files green.
+
+### Bumped
+
+- `package.json` version `0.2.23` → `0.3.0`.
+
 ## [0.2.23] - 2026-04-22
 
 ### Fixed

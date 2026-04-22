@@ -1,21 +1,22 @@
 // Decoration tab — home for all the non-functional personalization: BTFL
-// banner and mini-logo uploads. The Craft Name "designer" use case (pick
-// glyphs for the 15-char Craft Name field) is covered by the text input in
-// the OSD Preview tab's element panel; this page just hosts the two logo
-// uploaders that feed it.
+// banner and mini-logo uploads. Works in both HD and analog modes; the
+// only differences are pixel dimensions (analog slots are half HD's) and
+// on-goggle trigger mechanics (HD has a firmware SYM_LOGO element for the
+// banner; analog doesn't, so pilots trigger via Craft Name / Warnings).
 
 import { useComputed } from "@preact/signals";
 import { project, mutate } from "@/state/store";
 import { putAsset } from "@/state/assets";
 import { FileDrop } from "@/ui/shared/FileDrop";
 import { Button } from "@/ui/shared/Button";
-import type { LogoLayer } from "@/state/project";
+import type { LogoLayer, OsdMode } from "@/state/project";
 
 interface LogoSlotSpec {
   slot: LogoLayer["slot"];
   label: string;
-  dims: { w: number; h: number };
-  renderedAt: string;
+  /** Pixel dims per mode — analog is exactly half HD since glyphs are 12×18 vs 24×36. */
+  dims: Record<OsdMode, { w: number; h: number }>;
+  renderedAt: Record<OsdMode, string>;
   purpose: string;
 }
 
@@ -28,18 +29,31 @@ const LOGO_SLOTS: readonly LogoSlotSpec[] = [
   {
     slot: "btfl",
     label: "BTFL Logo (banner)",
-    dims: { w: 576, h: 144 },
-    renderedAt: "Startup / disarmed splash",
+    dims: {
+      hd: { w: 576, h: 144 },
+      analog: { w: 288, h: 72 },
+    },
+    renderedAt: {
+      hd: "Auto-drawn by the Betaflight Logo OSD element (startup / disarmed splash)",
+      analog:
+        "Trigger by setting Craft Name / Warning text to ASCII chars matching codes 160..255 (no firmware auto-draw on analog)",
+    },
     purpose:
-      "The big BETAFLIGHT-style banner. 96 tiles wrapped into glyph codes 160..255. Shown when the Betaflight Configurator 'Logo' OSD element is enabled, typically at the top-center while disarmed.",
+      "The big BETAFLIGHT-style banner. 96 tiles wrapped into glyph codes 160..255. HD firmware auto-draws via SYM_LOGO; analog pilots trigger display manually via Craft Name / Warnings.",
   },
   {
     slot: "mini",
     label: "Mini Logo",
-    dims: { w: 120, h: 36 },
-    renderedAt: "Anywhere via Craft Name `[\\]^_`",
+    dims: {
+      hd: { w: 120, h: 36 },
+      analog: { w: 60, h: 18 },
+    },
+    renderedAt: {
+      hd: "Anywhere via Craft Name `[\\]^_`",
+      analog: "Anywhere via Craft Name `[\\]^_` (same Craft Name trick — works identically)",
+    },
     purpose:
-      "A 5-tile inline logo (glyph codes 91..95). Render it in flight by setting your Betaflight Craft Name to the five characters `[\\]^_`.",
+      "A 5-tile inline logo (glyph codes 91..95). Render it in flight by setting your Betaflight Craft Name to the five characters `[\\]^_`. Works the same on HD and analog.",
   },
 ];
 
@@ -92,6 +106,7 @@ function clearLogoSlot(slot: LogoLayer["slot"]): void {
 }
 
 export function DecorationPage() {
+  const mode = project.value.meta.mode;
   return (
     <div class="max-w-4xl mx-auto w-full p-8 overflow-y-auto">
       <header class="mb-6">
@@ -102,20 +117,31 @@ export function DecorationPage() {
           Upload the two logo images your font ships. The mini-logo renders anywhere you
           type <code class="text-osd-mint">[\]^_</code> — select the Craft Name in the OSD
           Preview tab and paste it into the text field to see it inline.
+          {mode === "analog" && (
+            <>
+              {" "}
+              <span class="text-osd-amber">Analog note:</span> the big banner
+              has no firmware auto-draw on MAX7456, so you trigger it via Craft
+              Name / Warning text set to the ASCII chars matching the banner
+              slots. The mini-logo mechanic is identical to HD.
+            </>
+          )}
         </p>
       </header>
 
       <div class="flex flex-col gap-6">
         {LOGO_SLOTS.map((spec) => (
-          <LogoSlotCard key={spec.slot} spec={spec} />
+          <LogoSlotCard key={spec.slot} spec={spec} mode={mode} />
         ))}
       </div>
     </div>
   );
 }
 
-function LogoSlotCard({ spec }: { spec: LogoSlotSpec }) {
+function LogoSlotCard({ spec, mode }: { spec: LogoSlotSpec; mode: OsdMode }) {
   const layer = useComputed(() => findLogoLayerForSlot(spec.slot));
+  const dims = spec.dims[mode];
+  const renderedAt = spec.renderedAt[mode];
 
   return (
     <section class="bg-slate-900 border border-slate-800 rounded-lg p-4">
@@ -123,7 +149,7 @@ function LogoSlotCard({ spec }: { spec: LogoSlotSpec }) {
         <div>
           <h2 class="font-mono text-lg text-osd-mint">{spec.label}</h2>
           <p class="text-[11px] text-slate-500 mt-0.5 font-mono">
-            {spec.dims.w}×{spec.dims.h} · {spec.renderedAt}
+            {dims.w}×{dims.h} · {renderedAt}
           </p>
         </div>
         <div class="text-right text-[10px] text-slate-500 font-mono">
@@ -139,7 +165,7 @@ function LogoSlotCard({ spec }: { spec: LogoSlotSpec }) {
         </div>
         <ul class="text-slate-300 leading-snug list-disc list-inside">
           <li>
-            Target size: <span class="text-osd-mint">{spec.dims.w}×{spec.dims.h}</span> (non-
+            Target size: <span class="text-osd-mint">{dims.w}×{dims.h}</span> (non-
             matching sizes are scaled to fit while preserving aspect; letterboxed with
             chroma-gray).
           </li>
@@ -179,7 +205,7 @@ function LogoSlotCard({ spec }: { spec: LogoSlotSpec }) {
       ) : (
         <FileDrop
           accept="image/*"
-          label={`Drop a ${spec.dims.w}×${spec.dims.h} image`}
+          label={`Drop a ${dims.w}×${dims.h} image`}
           onFile={(f) => uploadOrReplaceLogo(spec.slot, f)}
         />
       )}

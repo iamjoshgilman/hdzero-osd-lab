@@ -12,27 +12,34 @@ import { Button } from "@/ui/shared/Button";
 import { TtfLayerForm } from "./TtfLayerForm";
 import { BitmapLayerForm } from "./BitmapLayerForm";
 import { McmLayerForm } from "./McmLayerForm";
+import { ModeToggle } from "@/ui/shared/ModeToggle";
 import { useResolvedAssets } from "@/ui/hooks/useResolvedAssets";
 import type { BitmapLayer, McmLayer } from "@/state/project";
 
 export function LayersPanel() {
   const layers = useComputed(() => project.value.font.layers);
   const overrideEntries = useComputed(() => Object.entries(project.value.font.overrides));
+  const mode = useComputed(() => project.value.meta.mode);
   const { layerErrors, loading } = useResolvedAssets();
   const [ttfFormOpen, setTtfFormOpen] = useState<boolean>(false);
   const [mcmFormOpen, setMcmFormOpen] = useState<boolean>(false);
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
 
   /**
-   * Base-font drop. Branches on file extension so pilots can drop either a
-   * 384×1152 HD BMP or an analog .mcm font here without thinking about which
-   * widget to use — both cases land as a full-font layer covering all glyph
-   * codes. For MCM, `subset: "ALL"` copies every analog glyph (0..255)
-   * verbatim into the HD atlas with the parser's 2× nearest-neighbor upscale.
+   * Base-font drop. Branches on file extension + current mode:
+   *   - HD mode: .bmp → bitmap layer, .mcm → MCM layer (auto-upscaled to HD)
+   *   - Analog mode: .mcm → native MCM layer, .bmp → rejected (no analog BMP format)
    */
   const addBaseFont = async (file: File) => {
-    const buf = await file.arrayBuffer();
     const isMcm = /\.mcm$/i.test(file.name);
+    const isBmp = /\.bmp$/i.test(file.name);
+    if (mode.value === "analog" && isBmp) {
+      alert(
+        "Analog mode accepts .mcm files only. The 384×1152 BMP format is HD-specific — switch to HDZero mode above if this is an HD font.",
+      );
+      return;
+    }
+    const buf = await file.arrayBuffer();
     if (isMcm) {
       const hash = await putAsset(buf, {
         name: file.name,
@@ -127,13 +134,35 @@ export function LayersPanel() {
   return (
     <aside class="w-80 shrink-0 border-r border-slate-800 bg-slate-900 p-4 flex flex-col gap-5 overflow-y-auto">
       <section>
+        <h2 class="text-xs font-mono uppercase tracking-wider text-slate-400 mb-2">
+          Target
+        </h2>
+        <ModeToggle />
+      </section>
+
+      <section>
         <h2 class="text-xs font-mono uppercase tracking-wider text-slate-400 mb-2">Base font</h2>
         <FileDrop
-          accept=".bmp,image/bmp,.mcm,text/plain"
-          label="Drop a 384×1152 BMP or analog .mcm"
+          accept={
+            mode.value === "analog"
+              ? ".mcm,text/plain"
+              : ".bmp,image/bmp,.mcm,text/plain"
+          }
+          label={
+            mode.value === "analog"
+              ? "Drop a .mcm analog font"
+              : "Drop a 384×1152 BMP or analog .mcm"
+          }
           onFile={addBaseFont}
         />
-        <SampleFontPicker onPick={loadSample} />
+        {mode.value === "hd" && <SampleFontPicker onPick={loadSample} />}
+        {mode.value === "analog" && (
+          <p class="text-[10px] text-slate-500 mt-2 leading-snug">
+            No analog samples shipped (licensing). Drop your own .mcm — export
+            from Betaflight Configurator's Font Manager, or find community
+            builds on sites like oscarliang.com.
+          </p>
+        )}
       </section>
 
       <section>
@@ -150,6 +179,11 @@ export function LayersPanel() {
                 setTtfFormOpen((x) => !x);
               }}
               class="!px-2 !py-1 !text-[10px]"
+              title={
+                mode.value === "analog"
+                  ? "Add a TTF / OTF font as a layer. Renders at native 12×18 in analog mode — pixel-designed fonts (PixelOperator, Press Start 2P, Minogram) read best."
+                  : "Add a TTF / OTF font as a layer"
+              }
             >
               {ttfFormOpen && !editingLayerId ? "− TTF" : "+ TTF"}
             </Button>
@@ -310,6 +344,15 @@ export function LayersPanel() {
         <p class="text-xs text-slate-500 mb-2">
           Click a glyph in the preview to select it, then drop or upload an image.
           Overrides always win over layers.
+          {mode.value === "analog" && (
+            <>
+              {" "}
+              <span class="text-osd-amber">
+                Analog mode scales to 12×18 — source images designed at or near
+                that size read crispest.
+              </span>
+            </>
+          )}
         </p>
         <OverrideAdder onAdd={addOverride} />
         <ul class="flex flex-col gap-1 mt-3">

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseMcm } from "./mcm";
+import { parseMcm, parseMcmNative } from "./mcm";
 
 // Helper: build a minimal MCM blob. Each glyph occupies 64 lines; 54 of those
 // carry pixel rows (18 rows × 3 sub-lines). We build by pixel rows (12 wide)
@@ -117,5 +117,61 @@ describe("parseMcm", () => {
     const crlf = "MAX7456\r\n" + glyph.replace(/\n/g, "\r\n");
     const tiles = parseMcm(crlf);
     expect(tiles.size).toBe(1);
+  });
+});
+
+describe("parseMcmNative", () => {
+  it("returns tiles at native 12×18 resolution (no upscale)", () => {
+    const glyph = buildGlyph([
+      "111111111111",
+      ...Array(17).fill("............"),
+    ]);
+    const tiles = parseMcmNative(glyph);
+    const tile = tiles.get(0)!;
+    // Native size: 12 × 18 × 3 = 648 bytes (vs 24×36×3 = 2592 for HD).
+    expect(tile.length).toBe(12 * 18 * 3);
+    // Top-left pixel: white.
+    expect([tile[0], tile[1], tile[2]]).toEqual([255, 255, 255]);
+    // Second pixel on first row: still white (entire top row is "1"s).
+    expect([tile[3], tile[4], tile[5]]).toEqual([255, 255, 255]);
+    // First pixel of second row: chroma-gray transparent.
+    const row1 = 12 * 3;
+    expect([tile[row1], tile[row1 + 1], tile[row1 + 2]]).toEqual([127, 127, 127]);
+  });
+
+  it("respects custom glyph + outline colors at native resolution", () => {
+    const glyph = buildGlyph([
+      "10..........",
+      ...Array(17).fill("............"),
+    ]);
+    const tiles = parseMcmNative(glyph, {
+      glyphColor: "#ff00ff",
+      outlineColor: "#00ff00",
+    });
+    const tile = tiles.get(0)!;
+    // Pixel 0 = glyph magenta; pixel 1 = outline green (no 2× offset in native mode).
+    expect([tile[0], tile[1], tile[2]]).toEqual([255, 0, 255]);
+    expect([tile[3], tile[4], tile[5]]).toEqual([0, 255, 0]);
+  });
+
+  it("parseMcm == upscale(parseMcmNative) for the same input", () => {
+    // Sanity: the HD path is now a thin 2× upscale over the native path. This
+    // locks that relationship in so future refactors can't desync them.
+    const glyph = buildGlyph([
+      "1111........",
+      "0000........",
+      ...Array(16).fill("............"),
+    ]);
+    const hd = parseMcm(glyph).get(0)!;
+    const native = parseMcmNative(glyph).get(0)!;
+    // HD's (0,0) block should be 4 pixels of (255,255,255) across cols 0-1, rows 0-1.
+    // Corresponds to native's (0,0) pixel = white.
+    expect([native[0], native[1], native[2]]).toEqual([255, 255, 255]);
+    expect([hd[0], hd[1], hd[2]]).toEqual([255, 255, 255]);
+    // HD's row 2 col 0 corresponds to native's row 1 col 0 = black.
+    const hdRow2 = 2 * 24 * 3;
+    const nativeRow1 = 12 * 3;
+    expect([hd[hdRow2], hd[hdRow2 + 1], hd[hdRow2 + 2]]).toEqual([0, 0, 0]);
+    expect([native[nativeRow1], native[nativeRow1 + 1], native[nativeRow1 + 2]]).toEqual([0, 0, 0]);
   });
 });

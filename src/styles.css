@@ -2,8 +2,81 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Theme palette — swaps between HDZero (neon digital) and Analog (phosphor
+ * CRT). Accent vars resolve through tailwind's osd-* color aliases so every
+ * styled element re-themes automatically. The analog mode also overrides
+ * tailwind's slate neutrals to cool-black / faint-green to commit to the
+ * CRT aesthetic — otherwise 90% of the pixels (panels, borders, page bg)
+ * stay identical and the mode swap doesn't read. `data-mode="analog"` is
+ * set on <html> by AppShell's effect that subscribes to project.meta.mode.
+ */
 :root {
   color-scheme: dark;
+
+  /* HDZero — neon/digital accent palette (default) */
+  --osd-mint: #00ffaa;
+  --osd-cyan: #00ffff;
+  --osd-magenta: #ff00ff;
+  --osd-amber: #ffb000;
+  --osd-alert: #ff3333;
+}
+
+:root[data-mode="analog"] {
+  /*
+   * Analog — CRT phosphor palette. Terminal-green primary, with dimmer green
+   * + pale-highlight secondary for visual hierarchy. Amber stays warm (keeps
+   * the tip/warning mental model). Alert stays red (universal safety signal).
+   */
+  --osd-mint: #39ff14;
+  --osd-cyan: #7dcf7a;
+  --osd-magenta: #e0ffe0;
+  --osd-amber: #ffcc33;
+  --osd-alert: #ff3333;
+}
+
+/*
+ * Analog neutrals — override tailwind's slate-* backgrounds + borders so the
+ * page, panels, and form surfaces drift from cool blue-grey to pure black
+ * with a faint green undertone. Applied via attribute-scoped selectors so
+ * HD mode is untouched.
+ */
+:root[data-mode="analog"] .bg-slate-950 {
+  background-color: #000000;
+}
+:root[data-mode="analog"] .bg-slate-900 {
+  background-color: #0a0f0a;
+}
+:root[data-mode="analog"] .bg-slate-800 {
+  background-color: #131a13;
+}
+:root[data-mode="analog"] .bg-slate-800\/60 {
+  background-color: rgba(19, 26, 19, 0.6);
+}
+:root[data-mode="analog"] .bg-slate-800\/80 {
+  background-color: rgba(19, 26, 19, 0.8);
+}
+:root[data-mode="analog"] .bg-slate-900\/40 {
+  background-color: rgba(10, 15, 10, 0.4);
+}
+:root[data-mode="analog"] .bg-slate-900\/50 {
+  background-color: rgba(10, 15, 10, 0.5);
+}
+:root[data-mode="analog"] .bg-slate-950\/60 {
+  background-color: rgba(0, 0, 0, 0.6);
+}
+:root[data-mode="analog"] .border-slate-800 {
+  border-color: #1a2a1a;
+}
+:root[data-mode="analog"] .border-slate-700 {
+  border-color: #2a4a2a;
+}
+/* Button base variants — secondary buttons need the new surface too. */
+:root[data-mode="analog"] .hover\:bg-slate-700:hover {
+  background-color: #203a20;
+}
+:root[data-mode="analog"] .hover\:bg-slate-800:hover {
+  background-color: #1a2a1a;
 }
 
 html,

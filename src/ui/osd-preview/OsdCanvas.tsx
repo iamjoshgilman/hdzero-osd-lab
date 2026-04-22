@@ -12,12 +12,39 @@ import { project, mutate } from "@/state/store";
 import { selectedOsdElement } from "@/state/ui-state";
 import { compose } from "@/compositor/compose";
 import { useResolvedAssets } from "@/ui/hooks/useResolvedAssets";
-import { FONT_SIZE, GLYPH_SIZE, codeToOrigin } from "@/compositor/constants";
+import {
+  FONT_SIZE,
+  GLYPH_SIZE,
+  codeToOrigin,
+  ANALOG_FONT_SIZE,
+  ANALOG_GLYPH_SIZE,
+  ANALOG_OSD_GRID,
+  analogCodeToOrigin,
+} from "@/compositor/constants";
 import { OSD_ELEMENTS, OSD_GRID, type OsdElement } from "@/osd-schema/elements";
-import type { ProjectDoc } from "@/state/project";
+import { analogDefaultFor } from "@/osd-schema/analog-defaults";
+import type { ProjectDoc, OsdMode } from "@/state/project";
 
-const OSD_W_PX = OSD_GRID.cols * GLYPH_SIZE.w; // 1272
-const OSD_H_PX = OSD_GRID.rows * GLYPH_SIZE.h; // 720
+/**
+ * Dimensions + lookup helpers that depend on the current OSD mode. Wrapping
+ * these up keeps the canvas render + drag/hit handlers mode-agnostic.
+ */
+function dimsForMode(mode: OsdMode) {
+  if (mode === "analog") {
+    return {
+      osdGrid: ANALOG_OSD_GRID,
+      glyphSize: ANALOG_GLYPH_SIZE,
+      fontSize: ANALOG_FONT_SIZE,
+      codeToOrigin: analogCodeToOrigin,
+    };
+  }
+  return {
+    osdGrid: OSD_GRID,
+    glyphSize: GLYPH_SIZE,
+    fontSize: FONT_SIZE,
+    codeToOrigin,
+  };
+}
 
 /** Background options — same semantics as the FontPreview toolbar. */
 const BG_OPTIONS = {
@@ -35,13 +62,27 @@ interface EffectivePosition {
 }
 
 /**
- * Resolve an element's actual position in the current project. Project
- * layout overrides win; otherwise we fall back to the schema defaults so a
- * fresh project shows a sensible OSD layout with no setup.
+ * Resolve an element's actual position in the current project. Branches on
+ * mode:
+ *   - HD: osdLayout.elements override → schema defaultPos + defaultEnabled.
+ *   - Analog: osdLayout.elementsAnalog override → ANALOG_DEFAULT_POSITIONS
+ *     starter set (enabled) → disabled at (0,0) if the element isn't in the
+ *     starter set. Lets pilots opt in to analog elements one at a time
+ *     instead of opening to an HD-layout mess clamped into 30×16.
  */
 function effectivePosition(element: OsdElement, doc: ProjectDoc): EffectivePosition {
-  const override = doc.osdLayout.elements[element.id];
+  const mode = doc.meta.mode;
+  const layoutMap =
+    mode === "analog" ? doc.osdLayout.elementsAnalog : doc.osdLayout.elements;
+  const override = layoutMap?.[element.id];
   if (override) return override;
+
+  if (mode === "analog") {
+    const analog = analogDefaultFor(element.id);
+    if (analog) return { x: analog.x, y: analog.y, enabled: true };
+    return { x: 0, y: 0, enabled: false };
+  }
+
   return {
     x: element.defaultPos.x,
     y: element.defaultPos.y,
@@ -85,6 +126,7 @@ export function OsdCanvas() {
   const atlas = useComputed(() => compose(project.value, assets.value));
   const selected = useComputed(() => selectedOsdElement.value);
   const hasLayers = useComputed(() => project.value.font.layers.length > 0);
+  const mode = useComputed(() => project.value.meta.mode);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragStateRef = useRef<DragState | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -93,6 +135,10 @@ export function OsdCanvas() {
   const [bgDim, setBgDim] = useState<number>(0); // 0..1 darkening overlay over bg image
   const [realism, setRealism] = useState<boolean>(false);
   const [shareMsg, setShareMsg] = useState<string | null>(null);
+
+  const dims = dimsForMode(mode.value);
+  const OSD_W_PX = dims.osdGrid.cols * dims.glyphSize.w;
+  const OSD_H_PX = dims.osdGrid.rows * dims.glyphSize.h;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -137,12 +183,12 @@ export function OsdCanvas() {
     const rgba = rgbToRgba(atlas.value);
     const copy = new Uint8ClampedArray(new ArrayBuffer(rgba.byteLength));
     copy.set(rgba);
-    const atlasImg = new ImageData(copy, FONT_SIZE.w, FONT_SIZE.h);
+    const atlasImg = new ImageData(copy, dims.fontSize.w, dims.fontSize.h);
 
     // Offscreen atlas canvas for fast drawImage-based blitting.
     const off = document.createElement("canvas");
-    off.width = FONT_SIZE.w;
-    off.height = FONT_SIZE.h;
+    off.width = dims.fontSize.w;
+    off.height = dims.fontSize.h;
     const offCtx = off.getContext("2d");
     if (!offCtx) return;
     offCtx.putImageData(atlasImg, 0, 0);
@@ -150,7 +196,7 @@ export function OsdCanvas() {
     // Treat chroma-gray pixels as transparent so the OSD bg shows through.
     // We do this with a second offscreen pass where we clear chroma-gray via
     // globalCompositeOperation; simpler approach: use ImageData walk.
-    const clearGray = offCtx.getImageData(0, 0, FONT_SIZE.w, FONT_SIZE.h);
+    const clearGray = offCtx.getImageData(0, 0, dims.fontSize.w, dims.fontSize.h);
     for (let i = 0; i < clearGray.data.length; i += 4) {
       if (
         clearGray.data[i] === 127 &&
@@ -179,12 +225,22 @@ export function OsdCanvas() {
           const code = sample[r * cols + c]!;
           const col = livePos.x + c;
           const row = livePos.y + r;
-          if (col >= OSD_GRID.cols || col < 0) continue;
-          if (row >= OSD_GRID.rows || row < 0) continue;
-          const { x: sx, y: sy } = codeToOrigin(code);
-          const dx = col * GLYPH_SIZE.w;
-          const dy = row * GLYPH_SIZE.h;
-          ctx.drawImage(off, sx, sy, GLYPH_SIZE.w, GLYPH_SIZE.h, dx, dy, GLYPH_SIZE.w, GLYPH_SIZE.h);
+          if (col >= dims.osdGrid.cols || col < 0) continue;
+          if (row >= dims.osdGrid.rows || row < 0) continue;
+          const { x: sx, y: sy } = dims.codeToOrigin(code);
+          const dx = col * dims.glyphSize.w;
+          const dy = row * dims.glyphSize.h;
+          ctx.drawImage(
+            off,
+            sx,
+            sy,
+            dims.glyphSize.w,
+            dims.glyphSize.h,
+            dx,
+            dy,
+            dims.glyphSize.w,
+            dims.glyphSize.h,
+          );
         }
       }
     }
@@ -241,10 +297,10 @@ export function OsdCanvas() {
           ctx.shadowColor = "#00ffaa";
           ctx.shadowBlur = 6;
           ctx.strokeRect(
-            livePos.x * GLYPH_SIZE.w - 1,
-            livePos.y * GLYPH_SIZE.h - 1,
-            cols * GLYPH_SIZE.w + 2,
-            rows * GLYPH_SIZE.h + 2,
+            livePos.x * dims.glyphSize.w - 1,
+            livePos.y * dims.glyphSize.h - 1,
+            cols * dims.glyphSize.w + 2,
+            rows * dims.glyphSize.h + 2,
           );
           ctx.shadowBlur = 0;
         }
@@ -259,9 +315,9 @@ export function OsdCanvas() {
     const rect = canvas.getBoundingClientRect();
     const px = ((e.clientX - rect.left) / rect.width) * OSD_W_PX;
     const py = ((e.clientY - rect.top) / rect.height) * OSD_H_PX;
-    const col = Math.floor(px / GLYPH_SIZE.w);
-    const row = Math.floor(py / GLYPH_SIZE.h);
-    if (col < 0 || col >= OSD_GRID.cols || row < 0 || row >= OSD_GRID.rows) return null;
+    const col = Math.floor(px / dims.glyphSize.w);
+    const row = Math.floor(py / dims.glyphSize.h);
+    if (col < 0 || col >= dims.osdGrid.cols || row < 0 || row >= dims.osdGrid.rows) return null;
     return { col, row };
   };
 
@@ -326,8 +382,8 @@ export function OsdCanvas() {
     const sample = effectiveSample(el, project.value);
     const rows = el.spanRows ?? 1;
     const width = Math.floor(sample.length / rows);
-    const newCol = Math.max(0, Math.min(OSD_GRID.cols - width, cell.col - offCol));
-    const newRow = Math.max(0, Math.min(OSD_GRID.rows - rows, cell.row - offRow));
+    const newCol = Math.max(0, Math.min(dims.osdGrid.cols - width, cell.col - offCol));
+    const newRow = Math.max(0, Math.min(dims.osdGrid.rows - rows, cell.row - offRow));
     const next: DragState = { elementId: dragStateRef.current.elementId, col: newCol, row: newRow };
     // Preserve the offsets across renders.
     (next as DragState & { _offCol?: number; _offRow?: number })._offCol = offCol;
@@ -406,22 +462,33 @@ export function OsdCanvas() {
       return;
     }
     mutate((doc) => {
-      const existing = doc.osdLayout.elements[el.id];
-      // Spread `existing` first so `customText` and any future per-element
-      // fields survive a drag. Previously we rebuilt the entry with just
-      // {x, y, enabled} and silently wiped the user's typed text.
-      doc.osdLayout.elements[el.id] = {
-        ...(existing ?? {}),
-        x: d.col,
-        y: d.row,
-        enabled: existing ? existing.enabled : el.defaultEnabled,
-      };
+      // Pick the right layout map for the active mode, creating the analog
+      // bucket on first write. Existing custom text + enabled flags carry
+      // over — spread-first preserves any per-element fields we add later.
+      if (doc.meta.mode === "analog") {
+        if (!doc.osdLayout.elementsAnalog) doc.osdLayout.elementsAnalog = {};
+        const existing = doc.osdLayout.elementsAnalog[el.id];
+        doc.osdLayout.elementsAnalog[el.id] = {
+          ...(existing ?? {}),
+          x: d.col,
+          y: d.row,
+          enabled: existing ? existing.enabled : el.defaultEnabled,
+        };
+      } else {
+        const existing = doc.osdLayout.elements[el.id];
+        doc.osdLayout.elements[el.id] = {
+          ...(existing ?? {}),
+          x: d.col,
+          y: d.row,
+          enabled: existing ? existing.enabled : el.defaultEnabled,
+        };
+      }
     });
     setDrag(null);
   };
 
   if (!hasLayers.value) {
-    return <EmptyOsdState />;
+    return <EmptyOsdState mode={mode.value} />;
   }
 
   return (
@@ -519,7 +586,7 @@ export function OsdCanvas() {
       </div>
       <p class="text-[10px] font-mono text-slate-500">
         {OSD_ELEMENTS.filter((e) => effectivePosition(e, project.value).enabled).length} of{" "}
-        {OSD_ELEMENTS.length} elements enabled · 53×20 grid ({OSD_W_PX}×{OSD_H_PX} native)
+        {OSD_ELEMENTS.length} elements enabled · {dims.osdGrid.cols}×{dims.osdGrid.rows} grid ({OSD_W_PX}×{OSD_H_PX} native)
       </p>
     </div>
   );
@@ -529,13 +596,17 @@ export function OsdCanvas() {
  * Shown in place of the OSD simulator canvas when no font is loaded. Mirrors
  * the Font tab's empty-state pattern and pitches the FPV-background feature
  * so pilots know that's an option before they even have a font to preview
- * over it.
+ * over it. Aspect ratio adapts to the active OSD mode so the empty state
+ * visually previews the grid shape they'll be working in.
  */
-function EmptyOsdState() {
+function EmptyOsdState({ mode }: { mode: OsdMode }) {
+  const d = dimsForMode(mode);
+  const w = d.osdGrid.cols * d.glyphSize.w;
+  const h = d.osdGrid.rows * d.glyphSize.h;
   return (
     <div
       class="border border-dashed border-slate-700 bg-slate-900/40 rounded flex flex-col items-center justify-center gap-5 text-center px-10 py-14 font-mono w-full max-w-3xl"
-      style={{ aspectRatio: `${OSD_W_PX} / ${OSD_H_PX}` }}
+      style={{ aspectRatio: `${w} / ${h}` }}
     >
       <div class="text-osd-mint text-xl">No font loaded</div>
       <p class="text-sm text-slate-300 leading-relaxed max-w-lg">

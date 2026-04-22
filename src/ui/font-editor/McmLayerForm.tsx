@@ -9,7 +9,8 @@
 // (glyph fill) and black (outline).
 
 import { useState } from "preact/hooks";
-import { mutate } from "@/state/store";
+import { useComputed } from "@preact/signals";
+import { project, mutate } from "@/state/store";
 import { putAsset } from "@/state/assets";
 import { FileDrop } from "@/ui/shared/FileDrop";
 import { Button } from "@/ui/shared/Button";
@@ -42,6 +43,7 @@ interface Props {
 }
 
 export function McmLayerForm({ onClose, editing }: Props) {
+  const mode = useComputed(() => project.value.meta.mode);
   const [pending, setPending] = useState<PendingMcm | null>(
     editing
       ? {
@@ -81,6 +83,11 @@ export function McmLayerForm({ onClose, editing }: Props) {
 
   const saveLayer = () => {
     if (!pending) return;
+    // Analog mode flattens to 2-bit at export — forcing white/black here so
+    // the preview matches what the goggle will actually render. Color pickers
+    // are hidden in that case, so the user can't pick anything else anyway.
+    const finalGlyph = mode.value === "analog" ? "#ffffff" : normalizeHex(glyphColor);
+    const finalOutline = mode.value === "analog" ? "#000000" : normalizeHex(outlineColor);
     const base: McmLayer = {
       id: editing?.id ?? `mcm-${Date.now()}`,
       kind: "mcm",
@@ -91,8 +98,8 @@ export function McmLayerForm({ onClose, editing }: Props) {
         mime: pending.mime,
       },
       subset,
-      glyphColor: normalizeHex(glyphColor),
-      outlineColor: normalizeHex(outlineColor),
+      glyphColor: finalGlyph as HexColor,
+      outlineColor: finalOutline as HexColor,
       enabled: editing?.enabled ?? true,
     };
     mutate((doc) => {
@@ -155,27 +162,36 @@ export function McmLayerForm({ onClose, editing }: Props) {
         </select>
       </label>
 
-      <label class="flex flex-col gap-1 text-slate-400">
-        <span>Glyph color (replaces MCM white)</span>
-        <input
-          type="text"
-          value={glyphColor}
-          onInput={(e: Event) => setGlyphColor((e.target as HTMLInputElement).value)}
-          placeholder="#E0E0E0"
-          class="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100"
-        />
-      </label>
+      {mode.value === "hd" ? (
+        <>
+          <label class="flex flex-col gap-1 text-slate-400">
+            <span>Glyph color (replaces MCM white)</span>
+            <input
+              type="text"
+              value={glyphColor}
+              onInput={(e: Event) => setGlyphColor((e.target as HTMLInputElement).value)}
+              placeholder="#E0E0E0"
+              class="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100"
+            />
+          </label>
 
-      <label class="flex flex-col gap-1 text-slate-400">
-        <span>Outline color (replaces MCM black)</span>
-        <input
-          type="text"
-          value={outlineColor}
-          onInput={(e: Event) => setOutlineColor((e.target as HTMLInputElement).value)}
-          placeholder="#000000"
-          class="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100"
-        />
-      </label>
+          <label class="flex flex-col gap-1 text-slate-400">
+            <span>Outline color (replaces MCM black)</span>
+            <input
+              type="text"
+              value={outlineColor}
+              onInput={(e: Event) => setOutlineColor((e.target as HTMLInputElement).value)}
+              placeholder="#000000"
+              class="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100"
+            />
+          </label>
+        </>
+      ) : (
+        <p class="text-[10px] text-slate-500 leading-snug border border-slate-800 rounded p-2">
+          Analog OSD is 2-bit monochrome — glyph pixels are locked to white on
+          black, no color. Upload a different .mcm if you want different art.
+        </p>
+      )}
 
       {err && <p class="text-osd-alert text-[10px]">{err}</p>}
 

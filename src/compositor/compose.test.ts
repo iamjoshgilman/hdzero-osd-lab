@@ -1,8 +1,16 @@
 import { describe, it, expect } from "vitest";
 import { compose, emptyResolvedAssets } from "./compose";
 import { createDefaultProject } from "@/state/project";
-import { createTile, extractTile, ATLAS_BYTES } from "./atlas";
-import { FONT_SIZE, codeToOrigin } from "./constants";
+import {
+  createTile,
+  extractTile,
+  ATLAS_BYTES,
+  ANALOG_ATLAS_BYTES,
+  ANALOG_TILE_BYTES,
+  createAnalogTile,
+  extractAnalogTile,
+} from "./atlas";
+import { FONT_SIZE, ANALOG_FONT_SIZE, codeToOrigin } from "./constants";
 import type { ProjectDoc } from "@/state/project";
 
 describe("compose", () => {
@@ -205,5 +213,147 @@ describe("compose", () => {
       data: new Uint8ClampedArray(100 * 100 * 3),
     });
     expect(() => compose(project, assets)).toThrow(/expected 384×1152/);
+  });
+});
+
+describe("compose — analog mode", () => {
+  // Helper: build a ProjectDoc with mode=analog and optional font layers.
+  function analogProject(
+    layers: ProjectDoc["font"]["layers"] = [],
+    overrides: ProjectDoc["font"]["overrides"] = {},
+  ): ProjectDoc {
+    const p = createDefaultProject();
+    p.meta.mode = "analog";
+    p.font.layers = layers;
+    p.font.overrides = overrides;
+    return p;
+  }
+
+  it("empty analog project returns a 192×288 chroma-gray atlas", () => {
+    const atlas = compose(analogProject());
+    expect(atlas.length).toBe(ANALOG_ATLAS_BYTES);
+    expect(atlas.length).toBe(ANALOG_FONT_SIZE.w * ANALOG_FONT_SIZE.h * 3);
+    expect(atlas[0]).toBe(127);
+    expect(atlas[ANALOG_ATLAS_BYTES - 1]).toBe(127);
+  });
+
+  it("mcm layer blits 12×18 tiles into the analog atlas", () => {
+    const tileMap = new Map<number, Uint8ClampedArray>();
+    tileMap.set(65, createAnalogTile([0, 255, 0])); // green 'A' at code 65
+    const project = analogProject([
+      {
+        id: "m",
+        kind: "mcm",
+        source: { kind: "user", hash: "h", name: "f.mcm", mime: "text/plain" },
+        subset: "BTFL_LETTERS",
+        glyphColor: "#ffffff",
+        outlineColor: "#000000",
+        enabled: true,
+      },
+    ]);
+    const assets = emptyResolvedAssets();
+    assets.mcm.set("m", tileMap);
+    const atlas = compose(project, assets);
+
+    const tile = extractAnalogTile(atlas, 65);
+    expect(tile.length).toBe(ANALOG_TILE_BYTES);
+    expect([tile[0], tile[1], tile[2]]).toEqual([0, 255, 0]);
+
+    // Code 64 (not in BTFL_LETTERS) stays transparent.
+    const untouched = extractAnalogTile(atlas, 64);
+    expect([untouched[0], untouched[1], untouched[2]]).toEqual([127, 127, 127]);
+  });
+
+  it("override with 12×18 tile blits in analog mode", () => {
+    const project = analogProject([], {
+      100: { source: { kind: "user", hash: "ov", name: "o.png", mime: "image/png" } },
+    });
+    const assets = emptyResolvedAssets();
+    assets.overrides.set(100, createAnalogTile([255, 0, 255])); // magenta
+    const atlas = compose(project, assets);
+    const tile = extractAnalogTile(atlas, 100);
+    expect([tile[0], tile[1], tile[2]]).toEqual([255, 0, 255]);
+  });
+
+  it("override with HD-sized 24×36 tile silently skips in analog mode", () => {
+    // Guards the mode-mismatch case: HD project switched to analog without
+    // re-uploading PNG overrides. Skipping is safer than crashing.
+    const project = analogProject([], {
+      100: { source: { kind: "user", hash: "ov", name: "o.png", mime: "image/png" } },
+    });
+    const assets = emptyResolvedAssets();
+    assets.overrides.set(100, createTile([255, 0, 255])); // HD-sized (24×36)
+    const atlas = compose(project, assets);
+    // Should be untouched chroma-gray, no crash.
+    const tile = extractAnalogTile(atlas, 100);
+    expect([tile[0], tile[1], tile[2]]).toEqual([127, 127, 127]);
+  });
+
+  it("bitmap layers are silently ignored in analog mode", () => {
+    // Bitmap layers are HD-only (no BMP analog atlas format). A project that
+    // had a bitmap layer before mode-switch shouldn't crash — just skip.
+    const project = analogProject([
+      {
+        id: "hd-base",
+        kind: "bitmap",
+        source: { kind: "user", hash: "h1", name: "base.bmp", mime: "image/bmp" },
+        subset: "ALL",
+        enabled: true,
+      },
+    ]);
+    const assets = emptyResolvedAssets();
+    assets.bitmap.set("h1", {
+      width: FONT_SIZE.w,
+      height: FONT_SIZE.h,
+      data: new Uint8ClampedArray(FONT_SIZE.w * FONT_SIZE.h * 3).fill(200),
+    });
+    const atlas = compose(project, assets);
+    // Chroma-gray everywhere — bitmap layer didn't apply.
+    expect(atlas[0]).toBe(127);
+    expect(atlas.length).toBe(ANALOG_ATLAS_BYTES);
+  });
+
+  it("INAV_LOGO subset (codes 257..296) filtered out as out-of-range", () => {
+    const tileMap = new Map<number, Uint8ClampedArray>();
+    tileMap.set(257, createAnalogTile([0, 0, 255]));
+    const project = analogProject([
+      {
+        id: "m",
+        kind: "mcm",
+        source: { kind: "user", hash: "h", name: "f.mcm", mime: "text/plain" },
+        subset: "INAV_LOGO",
+        glyphColor: "#ffffff",
+        outlineColor: "#000000",
+        enabled: true,
+      },
+    ]);
+    const assets = emptyResolvedAssets();
+    assets.mcm.set("m", tileMap);
+    const atlas = compose(project, assets);
+    // Atlas only has 256 slots, so nothing should have been written.
+    expect(atlas[0]).toBe(127);
+  });
+
+  it("tints apply in analog mode", () => {
+    const tileMap = new Map<number, Uint8ClampedArray>();
+    tileMap.set(65, createAnalogTile([255, 255, 255])); // white 'A'
+    const project = analogProject([
+      {
+        id: "m",
+        kind: "mcm",
+        source: { kind: "user", hash: "h", name: "f.mcm", mime: "text/plain" },
+        subset: "BTFL_LETTERS",
+        glyphColor: "#ffffff",
+        outlineColor: "#000000",
+        enabled: true,
+      },
+    ]);
+    project.font.tints = { 65: "#ff0000" }; // tint 'A' red
+    const assets = emptyResolvedAssets();
+    assets.mcm.set("m", tileMap);
+    const atlas = compose(project, assets);
+    const tile = extractAnalogTile(atlas, 65);
+    // White × red = red (multiplicative tint on chroma-gray-excluded pixels).
+    expect([tile[0], tile[1], tile[2]]).toEqual([255, 0, 0]);
   });
 });

@@ -13,6 +13,8 @@ import {
 } from "@/osd-schema/elements";
 import { Button } from "@/ui/shared/Button";
 import { FileDrop } from "@/ui/shared/FileDrop";
+import type { ProjectDoc } from "@/state/project";
+import { analogDefaultFor } from "@/osd-schema/analog-defaults";
 
 const CATEGORY_ORDER: readonly OsdElementCategory[] = [
   "rc",
@@ -34,52 +36,90 @@ const CATEGORY_LABEL: Record<OsdElementCategory, string> = {
   decorative: "Decorative",
 };
 
+/**
+ * Pick the right per-element layout map for the active mode. HD reads/writes
+ * `osdLayout.elements`; analog reads/writes `osdLayout.elementsAnalog`.
+ * `initialize` creates the analog bucket on first write so callers don't
+ * have to null-check inside every mutate().
+ */
+function layoutMapForActiveMode(
+  doc: ProjectDoc,
+  initialize = false,
+): ProjectDoc["osdLayout"]["elements"] {
+  if (doc.meta.mode === "analog") {
+    if (initialize && !doc.osdLayout.elementsAnalog) {
+      doc.osdLayout.elementsAnalog = {};
+    }
+    return doc.osdLayout.elementsAnalog ?? {};
+  }
+  return doc.osdLayout.elements;
+}
+
 function effectiveEnabled(element: OsdElement): boolean {
-  const override = project.value.osdLayout.elements[element.id];
-  return override ? override.enabled : element.defaultEnabled;
+  const doc = project.value;
+  const override = layoutMapForActiveMode(doc)[element.id];
+  if (override) return override.enabled;
+  if (doc.meta.mode === "analog") {
+    // Analog starter set: ~10 elements enabled; everything else opt-in.
+    return analogDefaultFor(element.id) !== null;
+  }
+  return element.defaultEnabled;
 }
 
 function effectivePos(element: OsdElement): { x: number; y: number } {
-  const override = project.value.osdLayout.elements[element.id];
-  return override ? { x: override.x, y: override.y } : element.defaultPos;
+  const doc = project.value;
+  const override = layoutMapForActiveMode(doc)[element.id];
+  if (override) return { x: override.x, y: override.y };
+  if (doc.meta.mode === "analog") {
+    const analog = analogDefaultFor(element.id);
+    return analog ?? { x: 0, y: 0 };
+  }
+  return element.defaultPos;
 }
 
 function setElementEnabled(element: OsdElement, enabled: boolean): void {
   mutate((doc) => {
-    const existing = doc.osdLayout.elements[element.id];
+    const map = layoutMapForActiveMode(doc, true);
+    const existing = map[element.id];
     const pos = existing ?? { ...element.defaultPos, enabled: element.defaultEnabled };
-    doc.osdLayout.elements[element.id] = { ...pos, enabled };
+    map[element.id] = { ...pos, enabled };
   });
 }
 
 function setElementText(element: OsdElement, text: string): void {
   mutate((doc) => {
-    const existing = doc.osdLayout.elements[element.id];
+    const map = layoutMapForActiveMode(doc, true);
+    const existing = map[element.id];
     const base = existing ?? { ...element.defaultPos, enabled: element.defaultEnabled };
     if (text === "") {
       // Empty string → revert to the schema sample
       const { customText, ...rest } = { ...base, customText: "" };
       void customText;
-      doc.osdLayout.elements[element.id] = rest;
+      map[element.id] = rest;
     } else {
-      doc.osdLayout.elements[element.id] = { ...base, customText: text };
+      map[element.id] = { ...base, customText: text };
     }
   });
 }
 
 function resetLayoutToDefaults(): void {
   mutate((doc) => {
-    doc.osdLayout.elements = {};
+    if (doc.meta.mode === "analog") {
+      doc.osdLayout.elementsAnalog = {};
+    } else {
+      doc.osdLayout.elements = {};
+    }
   });
   selectedOsdElement.value = null;
 }
 
 function enableAll(enabled: boolean): void {
   mutate((doc) => {
+    const map = layoutMapForActiveMode(doc, true);
     for (const el of OSD_ELEMENTS) {
-      const existing = doc.osdLayout.elements[el.id];
+      const existing = map[el.id];
       const pos = existing ?? { ...el.defaultPos, enabled };
-      doc.osdLayout.elements[el.id] = { ...pos, enabled };
+      map[el.id] = { ...pos, enabled };
     }
   });
 }
@@ -114,7 +154,7 @@ function SelectedElementPanel() {
   if (!id) return null;
   const element = OSD_ELEMENTS.find((e) => e.id === id);
   if (!element) return null;
-  const override = useComputed(() => project.value.osdLayout.elements[id]);
+  const override = useComputed(() => layoutMapForActiveMode(project.value)[id]);
   const currentText = override.value?.customText ?? "";
 
   return (

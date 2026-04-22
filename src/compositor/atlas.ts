@@ -2,7 +2,16 @@
 // no DOM, no Canvas. Kept split from compose.ts so they can be unit-tested
 // independently and reused by loaders when extracting tiles.
 
-import { GLYPH_SIZE, FONT_GRID, FONT_SIZE, codeToOrigin } from "./constants";
+import {
+  GLYPH_SIZE,
+  FONT_GRID,
+  FONT_SIZE,
+  codeToOrigin,
+  ANALOG_GLYPH_SIZE,
+  ANALOG_FONT_SIZE,
+  ANALOG_GLYPH_COUNT,
+  analogCodeToOrigin,
+} from "./constants";
 import type { Rgb } from "./palette";
 import type { Tile } from "./types";
 
@@ -11,6 +20,12 @@ export const TILE_BYTES = GLYPH_SIZE.w * GLYPH_SIZE.h * 3;
 
 /** Number of bytes in a full 384×1152 RGB atlas. */
 export const ATLAS_BYTES = FONT_SIZE.w * FONT_SIZE.h * 3;
+
+/** Number of bytes in a single 12×18 analog RGB tile. */
+export const ANALOG_TILE_BYTES = ANALOG_GLYPH_SIZE.w * ANALOG_GLYPH_SIZE.h * 3;
+
+/** Number of bytes in a full 192×288 analog RGB atlas. */
+export const ANALOG_ATLAS_BYTES = ANALOG_FONT_SIZE.w * ANALOG_FONT_SIZE.h * 3;
 
 /** Allocate an atlas-sized RGB buffer filled with the chroma-key gray. */
 export function createAtlas(fill: Rgb = [127, 127, 127]): Uint8ClampedArray {
@@ -146,6 +161,87 @@ export function extractBtflLogoBanner(atlas: Uint8ClampedArray): {
     }
   }
   return { width: bw, height: bh, data: out };
+}
+
+// ------------------------------------------------------------------
+// Analog (12×18, 256-glyph) parallels of the above. Kept separate
+// rather than parameterizing the HD versions so HD callers see an
+// unchanged API and analog callers get explicit function names.
+// ------------------------------------------------------------------
+
+/** Allocate an analog atlas (192×288 RGB) filled with chroma-gray. */
+export function createAnalogAtlas(fill: Rgb = [127, 127, 127]): Uint8ClampedArray {
+  const buf = new Uint8ClampedArray(ANALOG_ATLAS_BYTES);
+  fillRgb(buf, fill);
+  return buf;
+}
+
+/** Allocate a single 12×18 analog tile filled with chroma-gray. */
+export function createAnalogTile(fill: Rgb = [127, 127, 127]): Tile {
+  const t = new Uint8ClampedArray(ANALOG_TILE_BYTES);
+  fillRgb(t, fill);
+  return t;
+}
+
+/** Blit a 12×18 tile into the analog atlas at the given glyph code. */
+export function blitAnalogTile(
+  atlas: Uint8ClampedArray,
+  tile: Tile,
+  code: number,
+): void {
+  if (code < 0 || code >= ANALOG_GLYPH_COUNT) return;
+  const { x, y } = analogCodeToOrigin(code);
+  const atlasStride = ANALOG_FONT_SIZE.w * 3;
+  const tileStride = ANALOG_GLYPH_SIZE.w * 3;
+  for (let row = 0; row < ANALOG_GLYPH_SIZE.h; row++) {
+    const dst = (y + row) * atlasStride + x * 3;
+    const src = row * tileStride;
+    atlas.set(tile.subarray(src, src + tileStride), dst);
+  }
+}
+
+/** Extract a 12×18 tile from a source analog atlas at a given glyph code. */
+export function extractAnalogTile(atlas: Uint8ClampedArray, code: number): Tile {
+  const tile = new Uint8ClampedArray(ANALOG_TILE_BYTES);
+  const { x, y } = analogCodeToOrigin(code);
+  const atlasStride = ANALOG_FONT_SIZE.w * 3;
+  const tileStride = ANALOG_GLYPH_SIZE.w * 3;
+  for (let row = 0; row < ANALOG_GLYPH_SIZE.h; row++) {
+    const src = (y + row) * atlasStride + x * 3;
+    const dst = row * tileStride;
+    tile.set(atlas.subarray(src, src + tileStride), dst);
+  }
+  return tile;
+}
+
+/**
+ * Multiplicative tint applied in place to a single tile in the analog atlas.
+ * Same semantics as tintTileInPlace — chroma-gray skipped so transparency
+ * survives compositing on-goggle.
+ */
+export function tintAnalogTileInPlace(
+  atlas: Uint8ClampedArray,
+  code: number,
+  tint: Rgb,
+): void {
+  if (code < 0 || code >= ANALOG_GLYPH_COUNT) return;
+  const { x, y } = analogCodeToOrigin(code);
+  const stride = ANALOG_FONT_SIZE.w * 3;
+  const [tr, tg, tb] = tint;
+  for (let row = 0; row < ANALOG_GLYPH_SIZE.h; row++) {
+    let off = (y + row) * stride + x * 3;
+    for (let col = 0; col < ANALOG_GLYPH_SIZE.w; col++) {
+      const r = atlas[off]!;
+      const g = atlas[off + 1]!;
+      const b = atlas[off + 2]!;
+      if (!(r === 127 && g === 127 && b === 127)) {
+        atlas[off] = (r * tr * 257 + 0x8080) >>> 16;
+        atlas[off + 1] = (g * tg * 257 + 0x8080) >>> 16;
+        atlas[off + 2] = (b * tb * 257 + 0x8080) >>> 16;
+      }
+      off += 3;
+    }
+  }
 }
 
 /**

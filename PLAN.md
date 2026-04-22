@@ -286,7 +286,19 @@ Each phase is a git tag. Every phase has a user-visible deliverable and acceptan
 
 ---
 
-### Phase 3 — v0.3 "Decoration Generator"
+### Phase 3 — v0.3 "Analog mode" ✅ shipped
+
+**Shipped instead of the original "Decoration Generator" plan.** User feedback during v0.2.x made it clear the larger audience win was extending the tool to cover analog Betaflight pilots (MAX7456 FCs + `.mcm` fonts), not a visual Craft Name designer. The existing Craft Name text input in the OSD Preview element panel covers 90% of the original Decoration Generator's intent — pilots type their payload, see it render inline over the OSD. The separate visual glyph-picker is deferred.
+
+**What shipped in v0.3.0:** mode toggle (HDZero ↔ Analog) with full theme swap to a phosphor-CRT aesthetic, parallel 12×18 compositor path, MCM encoder, mode-isolated project state via font archive, mode-aware OSD grid + font preview + Decoration tab + How-To. Full detail in CHANGELOG.
+
+**Deferred to a future release (v0.4 or beyond):**
+
+- Visual 15-slot Craft Name glyph picker (the original Phase 3 concept). Covered at 90% by the existing text-input flow; the remaining 10% is "drag glyphs from the atlas into slots" which adds convenience but not new capability.
+
+---
+
+### Phase 3 (original, now deferred) — "Decoration Generator"
 
 **Goal.** The novel feature. Since Betaflight's OSD elements have fixed glyph codes, the only freeform slots are Craft Name (15 chars) and post-flight warning/stats strings. This phase gives users a visual designer for those, with live mapping to the exact ASCII payload to paste.
 

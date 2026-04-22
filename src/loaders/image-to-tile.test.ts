@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { imageRgbaToTile } from "./image-to-tile";
 import type { RgbaImage } from "@/compositor/types";
-import { GLYPH_SIZE } from "@/compositor/constants";
+import { GLYPH_SIZE, ANALOG_GLYPH_SIZE } from "@/compositor/constants";
 
 function solidRgba(width: number, height: number, rgba: [number, number, number, number]): RgbaImage {
   const data = new Uint8ClampedArray(width * height * 4);
@@ -63,5 +63,24 @@ describe("imageRgbaToTile", () => {
     expect([tile[mid], tile[mid + 1], tile[mid + 2]]).toEqual([0, 255, 0]);
     // Top row is outside band.
     expect([tile[0], tile[1], tile[2]]).toEqual([127, 127, 127]);
+  });
+
+  it("targetSize=ANALOG produces a 12×18×3 tile (648 bytes)", () => {
+    const src = solidRgba(10, 10, [255, 0, 0, 255]);
+    const tile = imageRgbaToTile(src, { targetSize: ANALOG_GLYPH_SIZE });
+    expect(tile.length).toBe(ANALOG_GLYPH_SIZE.w * ANALOG_GLYPH_SIZE.h * 3);
+    expect(tile.length).toBe(648);
+  });
+
+  it("analog target keeps aspect-fit + chroma-gray bars", () => {
+    // 24×24 source, target 12×18 → scale = min(12/24, 18/24) = 0.5 →
+    // scaled output is 12×12 centered vertically inside 12×18.
+    const src = solidRgba(24, 24, [255, 0, 0, 255]);
+    const tile = imageRgbaToTile(src, { targetSize: ANALOG_GLYPH_SIZE });
+    // offY = (18-12)/2 = 3. Top row (y=0) = chroma-gray.
+    expect([tile[0], tile[1], tile[2]]).toEqual([127, 127, 127]);
+    // Middle row (y=9) should be red.
+    const mid = 9 * ANALOG_GLYPH_SIZE.w * 3;
+    expect([tile[mid], tile[mid + 1], tile[mid + 2]]).toEqual([255, 0, 0]);
   });
 });

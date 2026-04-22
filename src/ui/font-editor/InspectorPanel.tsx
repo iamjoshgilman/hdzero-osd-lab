@@ -106,7 +106,10 @@ function GlyphDetails({ code, atlas }: { code: number; atlas: Uint8ClampedArray 
         )}
       </section>
 
-      <TintEditor code={code} />
+      {/* Color tint is HD-only — MAX7456 is 2-bit monochrome, so any tint
+          would get flattened to black/white at export and mislead the pilot
+          about what the goggle will actually show. */}
+      {project.value.meta.mode === "hd" && <TintEditor code={code} />}
 
       <SafetyNote meta={meta} />
     </div>

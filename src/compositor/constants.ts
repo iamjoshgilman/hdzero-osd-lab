@@ -20,11 +20,68 @@ export const FONT_SIZE = {
 /** Analog MCM glyph is 12×18, upscaled 2× into a HD glyph tile. */
 export const MCM_GLYPH_SIZE = { w: 12, h: 18 } as const;
 
+// ------------------------------------------------------------------
+// Analog (MAX7456) font geometry. Used by analog mode (v0.3.0+). At
+// native 12×18 the total atlas is 192×288 for 256 glyphs in a 16×16
+// layout — matches the convention used by MCM font viewers. Separate
+// constants from the HD ones so mode-aware code can select cleanly.
+// ------------------------------------------------------------------
+
+/** Analog glyph tile = 12 wide × 18 tall RGB pixels (same as MCM_GLYPH_SIZE). */
+export const ANALOG_GLYPH_SIZE = MCM_GLYPH_SIZE;
+
+/** Analog font atlas layout: 16×16 tile grid = 256 glyphs total. */
+export const ANALOG_FONT_GRID = { cols: 16, rows: 16 } as const;
+
+/** Total analog tile slots (0..255). */
+export const ANALOG_GLYPH_COUNT = ANALOG_FONT_GRID.cols * ANALOG_FONT_GRID.rows;
+
+/** Native analog atlas dimensions in pixels (192×288). */
+export const ANALOG_FONT_SIZE = {
+  w: ANALOG_FONT_GRID.cols * ANALOG_GLYPH_SIZE.w,
+  h: ANALOG_FONT_GRID.rows * ANALOG_GLYPH_SIZE.h,
+} as const;
+
+/**
+ * On-goggle OSD grid when rendering in analog mode. Matches Betaflight's
+ * MAX7456 PAL layout (30 columns × 16 rows). NTSC video only uses the top
+ * 13 rows; Betaflight Configurator's canvas still shows all 16 and lets
+ * the pilot decide what to keep above the NTSC cut line.
+ */
+export const ANALOG_OSD_GRID = { cols: 30, rows: 16 } as const;
+
+/**
+ * Analog codeToOrigin — resolves a 0..255 glyph code to its top-left pixel
+ * in the 192×288 atlas. Separate from the HD version so mode-aware renderers
+ * can select without branching inline.
+ */
+export function analogCodeToOrigin(code: number): { x: number; y: number } {
+  const row = Math.floor(code / ANALOG_FONT_GRID.cols);
+  const col = code - row * ANALOG_FONT_GRID.cols;
+  return { x: col * ANALOG_GLYPH_SIZE.w, y: row * ANALOG_GLYPH_SIZE.h };
+}
+
 /** Logo slot sizes referenced by the various -btfl*logo switches. */
 export const LOGO_SIZE = {
   btfl: { w: 576, h: 144 },
   inav: { w: 240, h: 144 },
   mini: { w: 120, h: 36 },
+} as const;
+
+/**
+ * Analog-mode logo slot sizes. Exactly half the HD pixel dimensions — analog
+ * glyphs are 12×18 vs HD's 24×36, so the banner layouts (same tile counts:
+ * 24×4 for BTFL, 5×1 for mini) compress to half the pixel footprint.
+ *
+ * Trigger mechanics differ from HD: analog firmware has no SYM_LOGO element,
+ * so the banner tiles at codes 160..255 aren't auto-drawn. Pilots trigger
+ * display by setting Craft Name (or warnings) to ASCII chars matching those
+ * codes. The tiles themselves live in the same slots either way.
+ */
+export const ANALOG_LOGO_SIZE = {
+  btfl: { w: 288, h: 72 },
+  inav: { w: 120, h: 72 },
+  mini: { w: 60, h: 18 },
 } as const;
 
 /** HDZero firmware treats this RGB as transparent (chroma-key). */

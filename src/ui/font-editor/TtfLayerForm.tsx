@@ -4,7 +4,8 @@
 // "random color per glyph" feature is discoverable.
 
 import { useState } from "preact/hooks";
-import { mutate } from "@/state/store";
+import { useComputed } from "@preact/signals";
+import { project, mutate } from "@/state/store";
 import { putAsset } from "@/state/assets";
 import { FileDrop } from "@/ui/shared/FileDrop";
 import { Button } from "@/ui/shared/Button";
@@ -39,6 +40,7 @@ function colorToInput(c: HexColor | HexColor[]): string {
 }
 
 export function TtfLayerForm({ onClose, editing }: Props) {
+  const mode = useComputed(() => project.value.meta.mode);
   const [pending, setPending] = useState<PendingTtf | null>(
     editing
       ? {
@@ -130,6 +132,17 @@ export function TtfLayerForm({ onClose, editing }: Props) {
           close
         </button>
       </header>
+
+      {mode.value === "analog" && (
+        <p class="text-[10px] text-slate-500 leading-snug border border-slate-800 rounded p-2">
+          <span class="text-osd-amber">Analog note:</span> renders at native
+          12×18. Most regular TTFs look chunky that small — try pixel fonts
+          like <span class="text-osd-cyan">Press Start 2P</span>,{" "}
+          <span class="text-osd-cyan">PixelOperator</span>, or{" "}
+          <span class="text-osd-cyan">Minogram</span> for crisp results, and
+          shrink the Size down toward 10–14.
+        </p>
+      )}
 
       {!pending ? (
         <FileDrop

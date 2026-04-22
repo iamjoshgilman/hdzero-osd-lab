@@ -47,7 +47,15 @@ export function FileDrop({ accept, onFile, label, class: className }: FileDropPr
         type="file"
         accept={accept}
         class="hidden"
-        onChange={(e: Event) => handleFiles((e.target as HTMLInputElement).files)}
+        onChange={(e: Event) => {
+          const input = e.target as HTMLInputElement;
+          handleFiles(input.files);
+          // Clear the input value so picking the same file again (e.g.
+          // uploading the same .mcm into both HD and analog modes)
+          // still fires `change` next time. Without this the browser
+          // sees "value unchanged" and skips the event.
+          input.value = "";
+        }}
       />
       <p>{label ?? "Drop a file or click to choose"}</p>
       <p class="text-xs text-slate-500 mt-1">{accept}</p>

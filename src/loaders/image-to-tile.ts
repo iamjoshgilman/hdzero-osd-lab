@@ -17,21 +17,29 @@ import type { HexColor } from "@/state/project";
 export interface ImageToTileOptions {
   /** If provided, non-transparent pixels are recolored to this hex (alpha preserved). */
   tintColor?: HexColor | string;
+  /**
+   * Target tile size. Defaults to HD GLYPH_SIZE (24×36). Pass ANALOG_GLYPH_SIZE
+   * (12×18) to produce a native analog tile. Aspect-fit scaling always
+   * preserves the source image's proportions.
+   */
+  targetSize?: { w: number; h: number };
 }
 
 /**
- * Scale an RGBA image to fit 24×36 preserving aspect and center it on a
- * chroma-gray background. Returns a fresh RGB tile buffer.
+ * Scale an RGBA image to fit the target tile size preserving aspect and
+ * center it on a chroma-gray background. Returns a fresh RGB tile buffer
+ * sized to match `targetSize` (default HD 24×36).
  */
 export function imageRgbaToTile(image: RgbaImage, opts: ImageToTileOptions = {}): Tile {
   const tint = opts.tintColor ? parseHex(opts.tintColor) : null;
-  const scale = Math.min(GLYPH_SIZE.w / image.width, GLYPH_SIZE.h / image.height);
+  const target = opts.targetSize ?? GLYPH_SIZE;
+  const scale = Math.min(target.w / image.width, target.h / image.height);
   const newW = Math.max(1, Math.round(image.width * scale));
   const newH = Math.max(1, Math.round(image.height * scale));
-  const offX = Math.floor((GLYPH_SIZE.w - newW) / 2);
-  const offY = Math.floor((GLYPH_SIZE.h - newH) / 2);
+  const offX = Math.floor((target.w - newW) / 2);
+  const offY = Math.floor((target.h - newH) / 2);
 
-  const tile = new Uint8ClampedArray(GLYPH_SIZE.w * GLYPH_SIZE.h * 3);
+  const tile = new Uint8ClampedArray(target.w * target.h * 3);
   // Background fill.
   const [tr, tg, tb] = COLOR_TRANSPARENT;
   for (let i = 0; i < tile.length; i += 3) {
@@ -42,7 +50,7 @@ export function imageRgbaToTile(image: RgbaImage, opts: ImageToTileOptions = {})
 
   // Nearest-neighbor sampling over each destination pixel inside the scaled box.
   const srcStride = image.width * 4;
-  const dstStride = GLYPH_SIZE.w * 3;
+  const dstStride = target.w * 3;
   const [bgR, bgG, bgB] = COLOR_TRANSPARENT;
   for (let dy = 0; dy < newH; dy++) {
     const srcY = Math.min(image.height - 1, Math.floor((dy + 0.5) / scale));

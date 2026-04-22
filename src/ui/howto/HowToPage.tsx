@@ -5,7 +5,13 @@
 // without screenshots. Kept text-first on purpose — the UI is small enough
 // that a clear word beats a screenshot that rots the first time a button
 // moves.
+//
+// Mode-aware: the top banner and the install section both adapt based on
+// whether the project is targeting HDZero or analog. Other sections are
+// shared — the workflows are 90% the same, just with different file formats.
 
+import { useComputed } from "@preact/signals";
+import { project } from "@/state/store";
 import { currentView } from "@/state/ui-state";
 
 interface Step {
@@ -18,6 +24,8 @@ interface Section {
   title: string;
   blurb?: string;
   steps: Step[];
+  /** Restrict this section to a specific mode. Undefined = show in both modes. */
+  onlyMode?: "hd" | "analog";
 }
 
 /** Quick inline UI token — styled to match in-app labels so steps feel grounded. */
@@ -46,28 +54,29 @@ const SECTIONS: readonly Section[] = [
     id: "first-font",
     title: "Your first font",
     blurb:
-      "The app auto-loads a sample font on first visit so you can see the full flow without uploading anything.",
+      "Pick your target (HDZero Digital or Analog MAX7456) above the base-font drop in the left panel, then load a font to get started.",
     steps: [
       {
-        title: "Explore the default",
+        title: "Choose your target mode",
         body: (
           <>
-            Open <TabLink view="font" label="Font" /> to see the 16×32 glyph atlas. Every
-            one of the 512 tiles is a glyph the goggle firmware can draw. The sample
-            ondrascz font is loaded as a base layer — you can delete it and start with
-            your own, or build on top of it.
+            Top of the <TabLink view="font" label="Font" /> tab's left panel has
+            a <UI>HDZero / Analog</UI> toggle. HDZero = 24×36 color HD atlas,
+            downloads as <code>BTFL_000.bmp</code>. Analog = 12×18 2-bit MCM,
+            downloads as <code>.mcm</code>. The whole UI re-themes based on
+            your pick.
           </>
         ),
       },
       {
-        title: "Download for your goggle",
+        title: "Load a font",
         body: (
           <>
-            Click <UI>↓ Download BTFL_000.bmp</UI> in the top bar. Drop the file onto
-            your HDZero Goggles 2 SD card at <code>resource/OSD/FC/BTFL_000.bmp</code>
-            {" "}(create the folders if they're missing). The goggle picks it up on next
-            boot when connected to a Betaflight FC — no menu toggle required. Requires
-            goggle firmware ≥ 7.66.120.
+            In HDZero mode: drop a <code>.bmp</code> or <code>.mcm</code> on
+            the base-font zone, or pick a sample from the community dropdown.
+            In analog mode: drop a <code>.mcm</code> (analog samples aren't
+            bundled — grab one from Betaflight Configurator's Font Manager or
+            a community source). The atlas renders as soon as the file lands.
           </>
         ),
       },
@@ -182,6 +191,7 @@ const SECTIONS: readonly Section[] = [
   {
     id: "banner-logo",
     title: "BTFL banner + inline mini-logo",
+    onlyMode: "hd",
     blurb:
       "Two logo slots ship with every font: a big 576×144 startup banner and a 120×36 inline mini-logo.",
     steps: [
@@ -284,8 +294,68 @@ const SECTIONS: readonly Section[] = [
     ],
   },
   {
+    id: "install-analog",
+    title: "Install on analog (MAX7456 FCs)",
+    onlyMode: "analog",
+    blurb:
+      "Analog OSD fonts are flashed to the MAX7456 chip on the FC via Betaflight Configurator — no SD card involved.",
+    steps: [
+      {
+        title: "Export the .mcm",
+        body: (
+          <>
+            In analog mode on the <TabLink view="font" label="Font" /> tab,
+            click <UI>↓ Download .mcm</UI> in the top bar. You'll get a text
+            file named after your project.
+          </>
+        ),
+      },
+      {
+        title: "Open Betaflight Configurator",
+        body: (
+          <>
+            Plug your FC in over USB, open Configurator, and go to the{" "}
+            <UI>OSD</UI> tab. Scroll down to the <UI>Font Manager</UI> dialog.
+          </>
+        ),
+      },
+      {
+        title: "Upload + flash",
+        body: (
+          <>
+            In Font Manager, click <UI>Upload Font</UI> and pick your exported
+            <code> .mcm</code>. The preview updates. Then click{" "}
+            <UI>Flash Font</UI> to write it to the FC's MAX7456 chip. Takes
+            ~30 seconds.
+          </>
+        ),
+      },
+      {
+        title: "Fly",
+        body: (
+          <>
+            Reboot the FC. Your OSD renders with the new glyphs the next time
+            you arm and see video. No SD card, no goggle firmware check — the
+            font lives on the FC itself.
+          </>
+        ),
+      },
+      {
+        title: "Didn't flash? Quick checklist",
+        body: (
+          <>
+            <span class="block">• FC actually has a MAX7456 chip (most analog FCs do)</span>
+            <span class="block">• Configurator shows "Font Manager" (old versions called it "Font Upload")</span>
+            <span class="block">• Battery power connected — some FCs refuse to flash the OSD chip from USB-only power</span>
+          </>
+        ),
+      },
+    ],
+  },
+  {
     id: "install-goggle",
     title: "Install on your HDZero Goggles 2",
+    onlyMode: "hd",
     blurb:
       "The one-stop recipe for getting your exported BMP onto the goggle. Takes about 30 seconds once the file is downloaded.",
     steps: [
@@ -399,6 +469,10 @@ const SECTIONS: readonly Section[] = [
 ];
 
 export function HowToPage() {
+  const mode = useComputed(() => project.value.meta.mode);
+  const visible = SECTIONS.filter((s) => !s.onlyMode || s.onlyMode === mode.value);
+  const isAnalog = mode.value === "analog";
+
   return (
     <div class="max-w-4xl mx-auto w-full p-8 overflow-y-auto">
       <header class="mb-6">
@@ -413,8 +487,32 @@ export function HowToPage() {
         </p>
       </header>
 
+      {isAnalog && (
+        <section class="mb-6 border border-osd-amber/60 bg-osd-amber/10 rounded-lg p-4 font-mono text-sm">
+          <h2 class="text-osd-amber font-semibold mb-2">You're in Analog mode</h2>
+          <p class="text-slate-300 leading-relaxed mb-2">
+            Everything's the same as HDZero mode, just with different file
+            formats: <code>.mcm</code> in / <code>.mcm</code> out, 12×18 tile
+            grid, 30×16 on-goggle grid. The install flow uses Betaflight
+            Configurator's Font Manager dialog instead of an SD card — see{" "}
+            <a href="#install-analog" class="text-osd-cyan underline">
+              Install on analog
+            </a>{" "}
+            below.
+          </p>
+          <p class="text-slate-400 text-xs leading-relaxed">
+            <span class="text-osd-amber">Font recommendations:</span>{" "}
+            MCM-format fonts work pixel-perfect (they're native analog
+            resolution). TTF layers are disabled in analog mode — at 12×18,
+            most TTFs are illegible unless specifically drawn as pixel fonts.
+            PNG glyph overrides work best when the source is already ~12×18;
+            larger sources get downsampled with visible chunk.
+          </p>
+        </section>
+      )}
+
       <nav class="mb-6 flex flex-wrap gap-2">
-        {SECTIONS.map((s) => (
+        {visible.map((s) => (
           <a
             key={s.id}
             href={`#${s.id}`}
@@ -426,7 +524,7 @@ export function HowToPage() {
       </nav>
 
       <div class="flex flex-col gap-6">
-        {SECTIONS.map((section) => (
+        {visible.map((section) => (
           <section
             key={section.id}
             id={section.id}

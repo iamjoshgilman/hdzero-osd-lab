@@ -12,3 +12,15 @@ export const currentView = signal<ViewMode>("font");
 
 /** Currently-selected OSD element id (in the OSD Preview tab), or null. */
 export const selectedOsdElement = signal<string | null>(null);
+
+/**
+ * Font preview zoom. Stored per-mode so switching between HD and analog
+ * doesn't carry a 2× analog zoom over to the 384×1152 HD canvas (that made
+ * HD appear oversized). Null in a slot = "auto-pick based on mode" (1× for
+ * HD, 2× for analog since the native 192×288 atlas is tiny). Lives as a
+ * signal so tab-switching doesn't remount the state away either.
+ */
+export const fontPreviewZoom = signal<{ hd: number | null; analog: number | null }>({
+  hd: null,
+  analog: null,
+});

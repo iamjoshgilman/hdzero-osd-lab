@@ -10,15 +10,21 @@ import { getAsset } from "@/state/assets";
 import { decodeBmp, normalizeHdOsdFont } from "@/loaders/bmp";
 import { imageRgbaToTile } from "@/loaders/image-to-tile";
 import { rasterizeTtfSubset } from "@/loaders/ttf";
-import { parseMcm } from "@/loaders/mcm";
+import { parseMcm, parseMcmNative } from "@/loaders/mcm";
 import { createRng } from "@/compositor/palette";
-import { GLYPH_SUBSETS, LOGO_SIZE } from "@/compositor/constants";
+import {
+  GLYPH_SUBSETS,
+  LOGO_SIZE,
+  ANALOG_LOGO_SIZE,
+  ANALOG_GLYPH_SIZE,
+  GLYPH_SIZE,
+} from "@/compositor/constants";
 import {
   emptyResolvedAssets,
   type ResolvedAssets,
 } from "@/compositor/compose";
 import type { RgbaImage } from "@/compositor/types";
-import type { LogoLayer, ProjectDoc, TtfLayer } from "@/state/project";
+import type { ProjectDoc, TtfLayer } from "@/state/project";
 
 export interface ResolvedAssetsState {
   assets: Signal<ResolvedAssets>;
@@ -166,14 +172,19 @@ async function loadTtfLayers(
 /**
  * Parse every enabled MCM layer into its TileMap. Each layer gets its own
  * entry keyed by layer.id (not asset hash) because the same .mcm can be
- * colored differently per layer — parseMcm bakes the ink colors into the
+ * colored differently per layer — the parser bakes the ink colors into the
  * output tiles.
+ *
+ * HD mode uses parseMcm (2× upscaled to 24×36 HD tiles). Analog mode uses
+ * parseMcmNative (native 12×18, no upscale). The mode is decided here so
+ * compose() downstream just receives tiles at the right resolution.
  */
 async function loadMcmLayers(
   doc: ProjectDoc,
   out: ResolvedAssets,
   errs: Record<string, string>,
 ): Promise<void> {
+  const parse = doc.meta.mode === "analog" ? parseMcmNative : parseMcm;
   for (const layer of doc.font.layers) {
     if (layer.kind !== "mcm") continue;
     if (!layer.enabled) continue;
@@ -185,7 +196,7 @@ async function loadMcmLayers(
     }
     try {
       const text = new TextDecoder().decode(rec.bytes);
-      const tiles = parseMcm(text, {
+      const tiles = parse(text, {
         glyphColor: layer.glyphColor,
         outlineColor: layer.outlineColor,
       });
@@ -211,6 +222,7 @@ async function loadLogoLayers(
   out: ResolvedAssets,
   errs: Record<string, string>,
 ): Promise<void> {
+  const logoSize = doc.meta.mode === "analog" ? ANALOG_LOGO_SIZE : LOGO_SIZE;
   for (const layer of doc.font.layers) {
     if (layer.kind !== "logo") continue;
     if (!layer.enabled) continue;
@@ -221,7 +233,8 @@ async function loadLogoLayers(
       continue;
     }
     try {
-      const sized = await scaleImageToLogoSlot(rec.bytes, rec.mime, layer.slot);
+      const target = logoSize[layer.slot];
+      const sized = await scaleImageToLogoSlot(rec.bytes, rec.mime, target);
       out.logo.set(layer.id, sized);
     } catch (err) {
       errs[layer.id] = err instanceof Error ? err.message : String(err);
@@ -239,9 +252,8 @@ async function loadLogoLayers(
 async function scaleImageToLogoSlot(
   bytes: ArrayBuffer,
   mime: string,
-  slot: LogoLayer["slot"],
+  target: { w: number; h: number },
 ): Promise<RgbaImage> {
-  const target = LOGO_SIZE[slot];
   const blob = new Blob([bytes], { type: mime || "image/png" });
   const src = await createImageBitmap(blob);
   const canvas = new OffscreenCanvas(target.w, target.h);
@@ -289,6 +301,11 @@ async function rasterizeOneTtfLayer(
 ): Promise<import("@/compositor/types").TileMap> {
   const codes = GLYPH_SUBSETS[layer.subset];
   const seed = project.value.meta.rngSeed;
+  // Render at mode-appropriate tile resolution so analog mode gets native
+  // 12×18 tiles instead of HD 24×36 ones. Most regular TTFs look chunky at
+  // 12×18; pixel-designed fonts (PixelOperator, Press Start 2P, etc.) read
+  // cleanly. The form's help text sets that expectation.
+  const targetSize = project.value.meta.mode === "analog" ? ANALOG_GLYPH_SIZE : GLYPH_SIZE;
   return rasterizeTtfSubset(bytes, {
     codes,
     size: layer.size,
@@ -300,17 +317,23 @@ async function rasterizeOneTtfLayer(
     outlineColor: layer.outlineColor,
     superSampling: layer.superSampling,
     rng: createRng(seed),
+    targetSize,
   });
 }
 
 async function loadOverrideTiles(doc: ProjectDoc, out: ResolvedAssets): Promise<void> {
+  const targetSize = doc.meta.mode === "analog" ? ANALOG_GLYPH_SIZE : GLYPH_SIZE;
   for (const [codeStr, override] of Object.entries(doc.font.overrides)) {
     if (override.source.kind !== "user") continue;
     const rec = await getAsset(override.source.hash);
     if (!rec) continue;
     const rgba = await decodeImageToRgba(rec.bytes, rec.mime);
     if (!rgba) continue;
-    const tile = imageRgbaToTile(rgba, override.tintColor ? { tintColor: override.tintColor } : {});
+    const opts: { targetSize: { w: number; h: number }; tintColor?: string } = {
+      targetSize,
+    };
+    if (override.tintColor) opts.tintColor = override.tintColor;
+    const tile = imageRgbaToTile(rgba, opts);
     out.overrides.set(Number(codeStr), tile);
   }
 }

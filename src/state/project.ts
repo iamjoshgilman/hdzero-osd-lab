@@ -10,6 +10,14 @@ export type ElementId = string;
 /** Monotonically bumped when a breaking schema change ships. Loaders migrate. */
 export const CURRENT_SCHEMA_VERSION = 1 as const;
 
+/**
+ * Target OSD platform this project builds for. Changes file format on
+ * export (BMP for HD, MCM for analog), atlas dimensions, on-goggle grid
+ * size, and which file types the base-font drop accepts. Pre-v0.3.0
+ * projects predate this field and get auto-migrated to "hd" on load.
+ */
+export type OsdMode = "hd" | "analog";
+
 export interface ProjectDoc {
   schemaVersion: typeof CURRENT_SCHEMA_VERSION;
   meta: {
@@ -20,6 +28,8 @@ export interface ProjectDoc {
     updatedAt: string;
     /** Null = unseeded (each compose() shuffles palettes fresh). Number = deterministic. */
     rngSeed: number | null;
+    /** Target OSD platform. See OsdMode. */
+    mode: OsdMode;
   };
   font: {
     /** Ordered compositor layers. Later layers overwrite earlier tiles at the same codes. */
@@ -34,6 +44,18 @@ export interface ProjectDoc {
      */
     tints?: Record<number, HexColor>;
   };
+  /**
+   * Archive of the OTHER mode's font composition so pilots can work on an
+   * HDZero and an analog build side-by-side without mixing layers. When
+   * ModeToggle flips the active mode, it tucks the current `font` into
+   * `fontArchive[previousMode]` and swaps in `fontArchive[nextMode]` (or a
+   * blank font if that slot's empty). So `doc.font` always represents the
+   * currently-active mode's composition — no downstream consumer branching.
+   */
+  fontArchive?: {
+    hd?: FontSlice;
+    analog?: FontSlice;
+  };
   osdLayout: {
     /** Betaflight OSD element layout — user's in-flight positions, not the font. */
     elements: Record<
@@ -46,6 +68,22 @@ export interface ProjectDoc {
         customText?: string;
       }
     >;
+    /**
+     * Separate layout map for analog mode. HD (53×20) and analog (30×16)
+     * have very different spatial budgets, so pilots get different positions
+     * per mode — switching modes doesn't mangle the other mode's layout.
+     * Absent means "not yet customized for analog"; OsdCanvas falls back to
+     * clamping the HD default positions into the analog grid.
+     */
+    elementsAnalog?: Record<
+      ElementId,
+      {
+        x: number;
+        y: number;
+        enabled: boolean;
+        customText?: string;
+      }
+    >;
     /** Optional FPV still-frame rendered behind the OSD preview. */
     background?: AssetRef;
   };
@@ -53,6 +91,37 @@ export interface ProjectDoc {
     craftName: CraftNameDecoration;
     stats: StatsDecoration[];
   };
+}
+
+/**
+ * Shape of the `font` slice. Extracted so the fontArchive slots can reference
+ * the same type without pulling in the rest of ProjectDoc.
+ */
+export interface FontSlice {
+  layers: Layer[];
+  overrides: Record<number, OverrideSource>;
+  tints?: Record<number, HexColor>;
+}
+
+/** An empty font slice. Used by the mode-toggle's "load archive or blank" path. */
+export function emptyFontSlice(): FontSlice {
+  return { layers: [], overrides: {}, tints: {} };
+}
+
+/**
+ * Mutate a project doc in place to switch target OSD modes. Archives the
+ * current font under the old mode's key and swaps in the new mode's font
+ * (from archive, or a blank slice if this is the first visit to that mode).
+ * So `doc.font` always represents the currently-active mode's composition
+ * — consumers never need to branch. Idempotent when called with the same
+ * mode as the current one.
+ */
+export function switchMode(doc: ProjectDoc, next: OsdMode): void {
+  if (doc.meta.mode === next) return;
+  if (!doc.fontArchive) doc.fontArchive = {};
+  doc.fontArchive[doc.meta.mode] = doc.font;
+  doc.font = doc.fontArchive[next] ?? emptyFontSlice();
+  doc.meta.mode = next;
 }
 
 /** Discriminated union; each layer kind knows how to contribute tiles. */
@@ -147,6 +216,7 @@ export function createDefaultProject(): ProjectDoc {
       createdAt: now,
       updatedAt: now,
       rngSeed: null,
+      mode: "hd",
     },
     font: {
       layers: [],

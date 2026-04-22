@@ -27,6 +27,11 @@ export interface TtfRasterOptions {
   outlineColor: HexColor | HexColor[];
   superSampling: number;
   rng: () => number;
+  /**
+   * Target tile size. Defaults to HD (24×36). Pass ANALOG_GLYPH_SIZE (12×18)
+   * to render natively at analog resolution. Tiles returned match this size.
+   */
+  targetSize?: { w: number; h: number };
 }
 
 let fontFaceCounter = 0;
@@ -68,15 +73,16 @@ export async function rasterizeTtfSubset(
   await fontSet.load(`${pxSize}px "${family}"`);
 
   try {
-    const workW = GLYPH_SIZE.w * ss;
-    const workH = Math.floor((GLYPH_SIZE.h * ss) / opts.vStretch);
+    const target = opts.targetSize ?? GLYPH_SIZE;
+    const workW = target.w * ss;
+    const workH = Math.floor((target.h * ss) / opts.vStretch);
     const out: TileMap = new Map();
 
     for (const code of opts.codes) {
       const ch = String.fromCharCode(code);
       const glyphRgb = resolveColor(opts.glyphColor, opts.rng);
       const outlineRgb = resolveColor(opts.outlineColor, opts.rng);
-      const tile = rasterizeOne(ch, family, workW, workH, opts, glyphRgb, outlineRgb);
+      const tile = rasterizeOne(ch, family, workW, workH, target, opts, glyphRgb, outlineRgb);
       out.set(code, tile);
     }
     return out;
@@ -90,6 +96,7 @@ function rasterizeOne(
   family: string,
   workW: number,
   workH: number,
+  target: { w: number; h: number },
   opts: TtfRasterOptions,
   glyphRgb: readonly [number, number, number],
   outlineRgb: readonly [number, number, number],
@@ -135,23 +142,23 @@ function rasterizeOne(
   const glyphCy = workH / 2 + (opts.glyphOffset.y * ss) / opts.vStretch + (ascent - descent) / 2;
   ctx.fillText(ch, glyphCx, glyphCy);
 
-  // Downscale to 24×36. The vertical stretch scales Y back up via the target H.
-  const finalCanvas = new OffscreenCanvas(GLYPH_SIZE.w, GLYPH_SIZE.h);
+  // Downscale to target tile size. The vertical stretch scales Y back up via the target H.
+  const finalCanvas = new OffscreenCanvas(target.w, target.h);
   const finalCtx = finalCanvas.getContext("2d");
   if (!finalCtx) throw new Error("rasterizeOne: final 2D context unavailable");
   finalCtx.fillStyle = rgbCss(COLOR_TRANSPARENT);
-  finalCtx.fillRect(0, 0, GLYPH_SIZE.w, GLYPH_SIZE.h);
+  finalCtx.fillRect(0, 0, target.w, target.h);
   finalCtx.imageSmoothingEnabled = true;
   finalCtx.imageSmoothingQuality = "high";
-  finalCtx.drawImage(canvas, 0, 0, GLYPH_SIZE.w, GLYPH_SIZE.h);
+  finalCtx.drawImage(canvas, 0, 0, target.w, target.h);
 
   // Extract RGB from RGBA image data.
-  const img = finalCtx.getImageData(0, 0, GLYPH_SIZE.w, GLYPH_SIZE.h);
-  return rgbaToRgb(img.data);
+  const img = finalCtx.getImageData(0, 0, target.w, target.h);
+  return rgbaToRgb(img.data, target);
 }
 
-function rgbaToRgb(rgba: Uint8ClampedArray): Tile {
-  const out = new Uint8ClampedArray(GLYPH_SIZE.w * GLYPH_SIZE.h * 3);
+function rgbaToRgb(rgba: Uint8ClampedArray, target: { w: number; h: number }): Tile {
+  const out = new Uint8ClampedArray(target.w * target.h * 3);
   for (let i = 0, j = 0; i < rgba.length; i += 4, j += 3) {
     out[j] = rgba[i]!;
     out[j + 1] = rgba[i + 1]!;

@@ -13,10 +13,17 @@
 //   "10" → white  (glyph fill)
 //   anything else → transparent (chroma-gray)
 //
-// Output: a TileMap of 24×36 RGB tiles. Each analog glyph is upscaled 2× via
-// nearest-neighbor to fit the HD OSD tile size.
+// Two parse modes:
+//   parseMcm       → returns 24×36 RGB tiles (upscaled 2× for HD composition)
+//   parseMcmNative → returns 12×18 RGB tiles (native analog, for analog mode)
 
-import { COLOR_MCM_BLACK, COLOR_MCM_WHITE, COLOR_TRANSPARENT, GLYPH_SIZE, MCM_GLYPH_SIZE } from "@/compositor/constants";
+import {
+  COLOR_MCM_BLACK,
+  COLOR_MCM_WHITE,
+  COLOR_TRANSPARENT,
+  GLYPH_SIZE,
+  MCM_GLYPH_SIZE,
+} from "@/compositor/constants";
 import type { Tile, TileMap } from "@/compositor/types";
 import { parseHex } from "@/compositor/palette";
 import type { HexColor } from "@/state/project";
@@ -30,9 +37,26 @@ export interface McmLoadOptions {
 
 /**
  * Parse an MCM text blob into a map of glyph-code → 24×36 RGB tile.
- * Missing glyphs (short files) simply aren't in the returned map.
+ * Each analog glyph is upscaled 2× via nearest-neighbor to fit the HD OSD
+ * tile size. Used by HD mode when the compositor needs analog art on an
+ * HD atlas. Missing glyphs (short files) simply aren't in the returned map.
  */
 export function parseMcm(text: string, opts: McmLoadOptions = {}): TileMap {
+  const native = parseMcmNative(text, opts);
+  const out: TileMap = new Map();
+  for (const [code, tile] of native) {
+    out.set(code, upscale2x(tile, MCM_GLYPH_SIZE.w, MCM_GLYPH_SIZE.h));
+  }
+  return out;
+}
+
+/**
+ * Parse an MCM text blob into a map of glyph-code → 12×18 RGB tile at
+ * native analog resolution. Used by analog mode where the tiles stay at
+ * their native pixel grid for on-goggle rendering and for MCM re-encoding.
+ * Returned tiles have length MCM_GLYPH_SIZE.w * MCM_GLYPH_SIZE.h * 3 = 648.
+ */
+export function parseMcmNative(text: string, opts: McmLoadOptions = {}): TileMap {
   const glyphRgb = opts.glyphColor ? parseHex(opts.glyphColor) : COLOR_MCM_WHITE;
   const outlineRgb = opts.outlineColor ? parseHex(opts.outlineColor) : COLOR_MCM_BLACK;
 
@@ -40,20 +64,16 @@ export function parseMcm(text: string, opts: McmLoadOptions = {}): TileMap {
   const idx = lines[0]?.trim() === "MAX7456" ? 1 : 0;
 
   const tiles: TileMap = new Map();
-
-  // Each glyph consumes 64 lines. Only the first 54 lines (18 rows × 3 lines/row)
-  // carry pixel data; the trailing 10 lines are padding.
   for (let code = 0; idx + code * 64 < lines.length; code++) {
     const base = idx + code * 64;
     if (base + 54 > lines.length) break;
-    const tile = parseGlyph(lines, base, glyphRgb, outlineRgb);
+    const tile = parseGlyphNative(lines, base, glyphRgb, outlineRgb);
     if (tile) tiles.set(code, tile);
   }
-
   return tiles;
 }
 
-function parseGlyph(
+function parseGlyphNative(
   lines: string[],
   base: number,
   glyphRgb: readonly [number, number, number],
@@ -87,9 +107,7 @@ function parseGlyph(
       }
     }
   }
-
-  // 2× nearest-neighbor upscale 12×18 → 24×36.
-  return upscale2x(mcm, MCM_GLYPH_SIZE.w, MCM_GLYPH_SIZE.h);
+  return mcm;
 }
 
 function fillRgb(buf: Uint8ClampedArray, color: readonly [number, number, number]): void {

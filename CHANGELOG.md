@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.7] - 2026-04-22
+
+### Changed — Minimal starter layout
+
+- Reduced default-enabled elements from 17 to **10** and repositioned them as a corner-spread starter layout that exercises every font category without visual clutter:
+  - **Top-left**: RSSI (1,1) + Link Quality (1,2)
+  - **Top-center**: Craft Name (21,1)
+  - **Center**: Crosshairs (25,9)
+  - **Bottom-left**: Battery Voltage (1,15), Avg Cell Voltage (1,16), Battery Usage bar (1,17)
+  - **Bottom-right**: Altitude (45,15), Timer 1 (46,16)
+  - **Bottom-center**: Flight Mode (24,18)
+- Turned OFF by default: `current_draw`, `mah_drawn`, `warnings`, `disarmed`. Kept available in the library — one click to re-enable.
+- Each category represented: icon-only (crosshairs), icon+digits (voltages, altitude, timer, RSSI), pure text (craft name, flymode), progress bar (battery usage). Makes font-evaluation glance-testable across the full glyph vocabulary in one view.
+
+### Notes
+
+- The existing `mutate((doc) => doc.osdLayout.elements = {})` reset flow in the "Reset to defaults" sidebar button now reverts to this new tighter layout.
+- Users with saved projects from earlier v0.2.0-alpha.x builds keep their old layouts; the cleanup is a default-for-new-projects change only.
+
 ## [0.2.0-alpha.6] - 2026-04-22
 
 ### Fixed

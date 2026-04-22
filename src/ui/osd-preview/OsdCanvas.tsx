@@ -49,6 +49,25 @@ function effectivePosition(element: OsdElement, doc: ProjectDoc): EffectivePosit
   };
 }
 
+/**
+ * Resolve the glyph sequence to blit for an element. For text-editable
+ * elements (craft name, pilot name, custom messages) the user's typed text
+ * wins over the schema sample; the text gets ASCII-encoded glyph-by-glyph.
+ * Characters outside the printable ASCII range fall through to space (0x20).
+ */
+function effectiveSample(element: OsdElement, doc: ProjectDoc): readonly number[] {
+  if (!element.editableText) return element.sample;
+  const override = doc.osdLayout.elements[element.id];
+  const text = override?.customText;
+  if (!text) return element.sample;
+  const max = element.maxTextLen ?? text.length;
+  const trimmed = text.slice(0, max);
+  return Array.from(trimmed, (c) => {
+    const code = c.charCodeAt(0);
+    return code >= 32 && code <= 126 ? code : 0x20;
+  });
+}
+
 /** Transient drag state: which element is being dragged and where it currently sits in grid cells. */
 interface DragState {
   elementId: string;
@@ -144,8 +163,9 @@ export function OsdCanvas() {
       if (!base.enabled) continue;
       const livePos =
         drag && drag.elementId === element.id ? { x: drag.col, y: drag.row } : base;
-      for (let i = 0; i < element.sample.length; i++) {
-        const code = element.sample[i]!;
+      const sample = effectiveSample(element, project.value);
+      for (let i = 0; i < sample.length; i++) {
+        const code = sample[i]!;
         const col = livePos.x + i;
         if (col >= OSD_GRID.cols || col < 0) break;
         const { x: sx, y: sy } = codeToOrigin(code);
@@ -164,6 +184,7 @@ export function OsdCanvas() {
         const livePos =
           drag && drag.elementId === el.id ? { x: drag.col, y: drag.row } : base;
         if (base.enabled) {
+          const sample = effectiveSample(el, project.value);
           ctx.strokeStyle = "#00ffaa";
           ctx.lineWidth = 2;
           ctx.shadowColor = "#00ffaa";
@@ -171,7 +192,7 @@ export function OsdCanvas() {
           ctx.strokeRect(
             livePos.x * GLYPH_SIZE.w - 1,
             livePos.y * GLYPH_SIZE.h - 1,
-            el.sample.length * GLYPH_SIZE.w + 2,
+            sample.length * GLYPH_SIZE.w + 2,
             GLYPH_SIZE.h + 2,
           );
           ctx.shadowBlur = 0;
@@ -200,7 +221,8 @@ export function OsdCanvas() {
       const el = OSD_ELEMENTS[i]!;
       const pos = effectivePosition(el, project.value);
       if (!pos.enabled) continue;
-      if (row === pos.y && col >= pos.x && col < pos.x + el.sample.length) return el;
+      const width = effectiveSample(el, project.value).length;
+      if (row === pos.y && col >= pos.x && col < pos.x + width) return el;
     }
     return null;
   };
@@ -241,7 +263,7 @@ export function OsdCanvas() {
       (dragStateRef.current as DragState & { _offRow?: number })._offRow ?? 0;
     const el = OSD_ELEMENTS.find((x) => x.id === dragStateRef.current!.elementId);
     if (!el) return;
-    const width = el.sample.length;
+    const width = effectiveSample(el, project.value).length;
     const newCol = Math.max(0, Math.min(OSD_GRID.cols - width, cell.col - offCol));
     const newRow = Math.max(0, Math.min(OSD_GRID.rows - 1, cell.row - offRow));
     const next: DragState = { elementId: dragStateRef.current.elementId, col: newCol, row: newRow };

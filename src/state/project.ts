@@ -29,7 +29,16 @@ export interface ProjectDoc {
   };
   osdLayout: {
     /** Betaflight OSD element layout — user's in-flight positions, not the font. */
-    elements: Record<ElementId, { x: number; y: number; enabled: boolean }>;
+    elements: Record<
+      ElementId,
+      {
+        x: number;
+        y: number;
+        enabled: boolean;
+        /** User-typed text override (craft name, pilot name, custom messages). */
+        customText?: string;
+      }
+    >;
     /** Optional FPV still-frame rendered behind the OSD preview. */
     background?: AssetRef;
   };

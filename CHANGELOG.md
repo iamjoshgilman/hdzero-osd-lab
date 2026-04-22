@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.5] - 2026-04-22
+
+### Added — Full-ish BF element parity + editable text
+
+- **~30 new OSD elements**, bringing total to 63. Covers the remaining common Betaflight slots: artificial horizon + sidebars, pitch/roll angles, vario, G-force, ESC temp/RPM/freq, motor diag, power (W), watt-hours drawn, efficiency, flight distance, yaw PIDs, PID/rate/profile/battery profile names, VTX channel, RSNR, TX uplink power, aux value, RC channels, stick overlays (L/R), up/down reference, remaining flight time, ready mode, total flights, 4 custom messages, serial text.
+- **Schema fields** `editableText?: boolean` and `maxTextLen?: number`. Marks craft name (15), pilot name (15), 4 custom messages (20 each), and serial text (30) as freeform text slots.
+- **ProjectDoc.osdLayout.elements.customText** — optional per-element text override persisted with the project.
+- **Selected-element panel** at the top of the OSD element library (right sidebar). Shows element name, close button, and — for text-editable elements — a live-updating input. Typing the pilot's callsign into Craft Name now reflects in the canvas immediately; clearing the field reverts to the sample.
+- `effectiveSample()` helper in `OsdCanvas` — resolves the glyph sequence for an element, honoring `customText` when set. Non-printable characters fall through to space. Drag clamping and hit-testing use the effective width so editing a long custom name still drags correctly.
+
+### Changed
+
+- Renamed `flight_time` → `item_timer_1` and `on_time` → `item_timer_2` to match Betaflight's actual enum naming (`OSD_ITEM_TIMER_1/2`). Pre-1.0 breaking change, but layout data hasn't been persisted across reloads for any long-running projects yet.
+
+### Notes
+
+- Tests: 125 → 126 (+1 editable-text invariant). Count floor bumped from 25 → 60.
+- Remaining gaps vs. full BF enum: waypoints (iNav/INAV-leaning), HDZero-specific system stats (goggle voltage, VTX temp, fan speed), lap timers, camera frame, adjustment_range, debug. All niche — will add as users request them.
+
 ## [0.2.0-alpha.4] - 2026-04-22
 
 ### Added — FPV background image

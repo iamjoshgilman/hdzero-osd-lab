@@ -52,6 +52,21 @@ function setElementEnabled(element: OsdElement, enabled: boolean): void {
   });
 }
 
+function setElementText(element: OsdElement, text: string): void {
+  mutate((doc) => {
+    const existing = doc.osdLayout.elements[element.id];
+    const base = existing ?? { ...element.defaultPos, enabled: element.defaultEnabled };
+    if (text === "") {
+      // Empty string → revert to the schema sample
+      const { customText, ...rest } = { ...base, customText: "" };
+      void customText;
+      doc.osdLayout.elements[element.id] = rest;
+    } else {
+      doc.osdLayout.elements[element.id] = { ...base, customText: text };
+    }
+  });
+}
+
 function resetLayoutToDefaults(): void {
   mutate((doc) => {
     doc.osdLayout.elements = {};
@@ -67,6 +82,61 @@ function enableAll(enabled: boolean): void {
       doc.osdLayout.elements[el.id] = { ...pos, enabled };
     }
   });
+}
+
+function SelectedElementPanel() {
+  const selected = useComputed(() => selectedOsdElement.value);
+  const id = selected.value;
+  if (!id) return null;
+  const element = OSD_ELEMENTS.find((e) => e.id === id);
+  if (!element) return null;
+  const override = useComputed(() => project.value.osdLayout.elements[id]);
+  const currentText = override.value?.customText ?? "";
+
+  return (
+    <section class="border border-osd-mint/40 bg-slate-800/60 rounded p-2 flex flex-col gap-2">
+      <header class="flex items-center justify-between">
+        <h3 class="text-[11px] text-osd-mint font-semibold">{element.label}</h3>
+        <button
+          class="text-slate-500 hover:text-slate-300 text-[10px]"
+          onClick={() => (selectedOsdElement.value = null)}
+        >
+          clear
+        </button>
+      </header>
+
+      {element.editableText ? (
+        <label class="flex flex-col gap-1 text-[10px] text-slate-400">
+          <span>
+            Custom text{" "}
+            {element.maxTextLen !== undefined && (
+              <span class="text-slate-600">(max {element.maxTextLen})</span>
+            )}
+          </span>
+          <input
+            type="text"
+            value={currentText}
+            maxLength={element.maxTextLen}
+            placeholder={element.sample
+              .map((c) => (c >= 32 && c <= 126 ? String.fromCharCode(c) : "·"))
+              .join("")}
+            onInput={(e: Event) => setElementText(element, (e.target as HTMLInputElement).value)}
+            class="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 text-[11px] font-mono"
+          />
+          <span class="text-slate-600 text-[9px]">
+            Leave empty to show the sample value. Characters render as whatever glyph your
+            font has at that ASCII code.
+          </span>
+        </label>
+      ) : (
+        <p class="text-[10px] text-slate-500 leading-snug">
+          Position, visibility, and drag-to-reposition work below. This element's content is
+          firmware-driven — the sample shown is a plausible flying value.
+        </p>
+      )}
+      {element.note && <p class="text-[10px] text-slate-500 leading-snug">{element.note}</p>}
+    </section>
+  );
 }
 
 async function setBackgroundImage(file: File): Promise<void> {
@@ -140,6 +210,9 @@ export function ElementLibrary() {
         Drag any element on the canvas to reposition. Click an element here or on the canvas
         to highlight it. Toggle the checkbox to show/hide in the simulated OSD.
       </p>
+
+      <SelectedElementPanel />
+
 
       <section>
         <h3 class="text-[10px] uppercase tracking-wider text-slate-500 mb-1">

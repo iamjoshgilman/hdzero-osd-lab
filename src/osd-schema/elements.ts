@@ -34,6 +34,14 @@ export interface OsdElement {
   defaultEnabled: boolean;
   /** Sample glyph sequence blitted at render time. Each entry is a 0..255 code. */
   sample: readonly number[];
+  /**
+   * If true, the user can override the `sample` with their own text via an
+   * input field in the UI. Good for craft name, pilot name, custom messages —
+   * places where Betaflight treats the element contents as freeform text.
+   */
+  editableText?: boolean;
+  /** Max characters accepted when editableText is true. Matches BF field limits. */
+  maxTextLen?: number;
   /** Optional extra note surfaced by the inspector. */
   note?: string;
 }
@@ -60,6 +68,8 @@ const SYM_HEADING_LINE = 0x1d;
 const SYM_SAT_L = 0x1e;
 const SYM_SAT_R = 0x1f;
 const SYM_ARROW_NORTH = 0x68;
+const SYM_ARROW_SMALL_UP = 0x75;
+const SYM_ARROW_SMALL_DOWN = 0x76;
 const SYM_SPEED = 0x70;
 const SYM_TEMPERATURE = 0x7a;
 const SYM_LINK_QUALITY = 0x7b;
@@ -71,14 +81,23 @@ const SYM_AMP = 0x9a;
 const SYM_ON_M = 0x9b;
 const SYM_FLY_M = 0x9c;
 const SYM_KPH = 0x9e;
+const SYM_MPS = 0x9f;
 const SYM_BATT_FULL = 0x90;
 const SYM_BATT_EMPTY = 0x96;
 const SYM_MAIN_BATT = 0x97;
 const SYM_AH_LEFT = 0x03;
 const SYM_AH_RIGHT = 0x02;
 const SYM_AH_CENTER = 0x73;
+const SYM_AH_BAR9_4 = 0x84;
+const SYM_AH_DECORATION = 0x13;
 const SYM_M = 0x0c;
 const SYM_C = 0x0e;
+const SYM_WATT = 0x57;
+const SYM_AH_CENTER_LINE = 0x72;
+const SYM_AH_CENTER_LINE_RIGHT = 0x74;
+const SYM_STICK_OVERLAY_CENTER = 0x0b;
+const SYM_STICK_OVERLAY_HORIZONTAL = 0x17;
+const SYM_STICK_OVERLAY_VERTICAL = 0x16;
 
 export const OSD_ELEMENTS: readonly OsdElement[] = [
   // ---- Pilot info / text ----
@@ -89,6 +108,8 @@ export const OSD_ELEMENTS: readonly OsdElement[] = [
     defaultPos: { x: 20, y: 11 },
     defaultEnabled: true,
     sample: ch("WHITERQBBIT"),
+    editableText: true,
+    maxTextLen: 15,
     note: "Freeform 15-char text field. See the Decoration Generator (v0.3) for inline-glyph tricks.",
   },
   {
@@ -98,6 +119,8 @@ export const OSD_ELEMENTS: readonly OsdElement[] = [
     defaultPos: { x: 20, y: 12 },
     defaultEnabled: false,
     sample: ch("ONDRAS"),
+    editableText: true,
+    maxTextLen: 15,
   },
   {
     id: "rtc_datetime",
@@ -106,6 +129,22 @@ export const OSD_ELEMENTS: readonly OsdElement[] = [
     defaultPos: { x: 18, y: 1 },
     defaultEnabled: false,
     sample: ch("2026-04-22 12:00"),
+  },
+  {
+    id: "ready_mode",
+    label: "Ready Mode",
+    category: "status",
+    defaultPos: { x: 22, y: 10 },
+    defaultEnabled: false,
+    sample: ch("READY"),
+  },
+  {
+    id: "total_flights",
+    label: "Total Flights",
+    category: "status",
+    defaultPos: { x: 2, y: 4 },
+    defaultEnabled: false,
+    sample: ch("#1234"),
   },
 
   // ---- RC link ----
@@ -313,21 +352,31 @@ export const OSD_ELEMENTS: readonly OsdElement[] = [
   },
 
   // ---- Timers ----
+  // Betaflight exposes two generic timer slots; users choose what each shows
+  // (flight time / on time / lap / etc.). We render plausible samples.
   {
-    id: "flight_time",
-    label: "Flight Time",
+    id: "item_timer_1",
+    label: "Timer 1 (flight time)",
     category: "timer",
     defaultPos: { x: 38, y: 13 },
     defaultEnabled: true,
     sample: [SYM_FLY_M, ...ch("01:23")],
   },
   {
-    id: "on_time",
-    label: "On Time",
+    id: "item_timer_2",
+    label: "Timer 2 (on time)",
     category: "timer",
     defaultPos: { x: 38, y: 14 },
     defaultEnabled: false,
     sample: [SYM_ON_M, ...ch("02:01")],
+  },
+  {
+    id: "remaining_time_estimate",
+    label: "Remaining Flight Time",
+    category: "timer",
+    defaultPos: { x: 38, y: 15 },
+    defaultEnabled: false,
+    sample: ch("03:45"),
   },
 
   // ---- Rotation / PIDs (usually tuning-only) ----
@@ -366,6 +415,309 @@ export const OSD_ELEMENTS: readonly OsdElement[] = [
     defaultPos: { x: 2, y: 15 },
     defaultEnabled: false,
     sample: [SYM_BBLOG, ...ch(" 512M")],
+  },
+
+  // ---- AHI (artificial horizon) ----
+  {
+    id: "artificial_horizon",
+    label: "Artificial Horizon",
+    category: "flight",
+    defaultPos: { x: 22, y: 7 },
+    defaultEnabled: false,
+    // 9-tile center row at neutral pitch/roll; firmware animates this.
+    sample: [
+      SYM_AH_BAR9_4,
+      SYM_AH_BAR9_4,
+      SYM_AH_BAR9_4,
+      SYM_AH_BAR9_4,
+      SYM_AH_CENTER_LINE,
+      SYM_AH_BAR9_4,
+      SYM_AH_BAR9_4,
+      SYM_AH_BAR9_4,
+      SYM_AH_CENTER_LINE_RIGHT,
+    ],
+  },
+  {
+    id: "horizon_sidebars",
+    label: "Horizon Sidebars",
+    category: "flight",
+    defaultPos: { x: 17, y: 7 },
+    defaultEnabled: false,
+    sample: [SYM_AH_DECORATION, SYM_AH_DECORATION, SYM_AH_DECORATION],
+  },
+
+  // ---- Angles ----
+  {
+    id: "pitch_angle",
+    label: "Pitch Angle",
+    category: "flight",
+    defaultPos: { x: 2, y: 7 },
+    defaultEnabled: false,
+    sample: [SYM_PITCH, ...ch(" 0.5")],
+  },
+  {
+    id: "roll_angle",
+    label: "Roll Angle",
+    category: "flight",
+    defaultPos: { x: 2, y: 8 },
+    defaultEnabled: false,
+    sample: [SYM_ROLL, ...ch(" 1.2")],
+  },
+  {
+    id: "numerical_vario",
+    label: "Vertical Speed",
+    category: "flight",
+    defaultPos: { x: 2, y: 9 },
+    defaultEnabled: false,
+    sample: [SYM_ARROW_SMALL_UP, ...ch("1.2"), SYM_MPS],
+  },
+  {
+    id: "g_force",
+    label: "G-Force",
+    category: "flight",
+    defaultPos: { x: 2, y: 6 },
+    defaultEnabled: false,
+    sample: ch("0.8G"),
+  },
+
+  // ---- ESC telemetry ----
+  {
+    id: "esc_tmp",
+    label: "ESC Temperature",
+    category: "power",
+    defaultPos: { x: 2, y: 13 },
+    defaultEnabled: false,
+    sample: [SYM_TEMPERATURE, ...ch("45"), SYM_C],
+  },
+  {
+    id: "esc_rpm",
+    label: "ESC RPM",
+    category: "power",
+    defaultPos: { x: 40, y: 12 },
+    defaultEnabled: false,
+    sample: ch("8450"),
+  },
+  {
+    id: "esc_rpm_freq",
+    label: "ESC RPM (Hz)",
+    category: "power",
+    defaultPos: { x: 40, y: 11 },
+    defaultEnabled: false,
+    sample: ch("141Hz"),
+  },
+  {
+    id: "motor_diag",
+    label: "Motor Diagnostics",
+    category: "power",
+    defaultPos: { x: 40, y: 15 },
+    defaultEnabled: false,
+    sample: ch("M1-4"),
+  },
+
+  // ---- Power metrics ----
+  {
+    id: "power",
+    label: "Power (W)",
+    category: "power",
+    defaultPos: { x: 22, y: 16 },
+    defaultEnabled: false,
+    sample: [...ch("125"), SYM_WATT],
+  },
+  {
+    id: "watt_hours_drawn",
+    label: "Watt-Hours Drawn",
+    category: "power",
+    defaultPos: { x: 22, y: 17 },
+    defaultEnabled: false,
+    sample: ch("1.2Wh"),
+  },
+  {
+    id: "efficiency",
+    label: "Efficiency (mAh/km)",
+    category: "power",
+    defaultPos: { x: 30, y: 17 },
+    defaultEnabled: false,
+    sample: ch("85mAh"),
+  },
+  {
+    id: "flight_dist",
+    label: "Flight Distance",
+    category: "nav",
+    defaultPos: { x: 40, y: 10 },
+    defaultEnabled: false,
+    sample: [...ch("1234"), SYM_M],
+  },
+
+  // ---- Tuning ----
+  {
+    id: "yaw_pids",
+    label: "Yaw PIDs",
+    category: "status",
+    defaultPos: { x: 7, y: 16 },
+    defaultEnabled: false,
+    sample: ch("Y 45 50 30"),
+  },
+  {
+    id: "pid_profile_name",
+    label: "PID Profile Name",
+    category: "status",
+    defaultPos: { x: 10, y: 3 },
+    defaultEnabled: false,
+    sample: ch("ACRO"),
+  },
+  {
+    id: "rate_profile_name",
+    label: "Rate Profile Name",
+    category: "status",
+    defaultPos: { x: 20, y: 3 },
+    defaultEnabled: false,
+    sample: ch("RACE"),
+  },
+  {
+    id: "profile_name",
+    label: "Profile Name",
+    category: "status",
+    defaultPos: { x: 30, y: 3 },
+    defaultEnabled: false,
+    sample: ch("BUILD A"),
+  },
+  {
+    id: "battery_profile_name",
+    label: "Battery Profile",
+    category: "power",
+    defaultPos: { x: 40, y: 3 },
+    defaultEnabled: false,
+    sample: ch("6S1500"),
+  },
+
+  // ---- VTX / RX telemetry ----
+  {
+    id: "vtx_channel",
+    label: "VTX Channel",
+    category: "rc",
+    defaultPos: { x: 48, y: 1 },
+    defaultEnabled: false,
+    sample: ch("R:1"),
+  },
+  {
+    id: "rsnr_value",
+    label: "RSNR (signal-to-noise)",
+    category: "rc",
+    defaultPos: { x: 2, y: 13 },
+    defaultEnabled: false,
+    sample: ch("45dB"),
+  },
+  {
+    id: "tx_uplink_power",
+    label: "TX Uplink Power",
+    category: "rc",
+    defaultPos: { x: 2, y: 16 },
+    defaultEnabled: false,
+    sample: ch("100mW"),
+  },
+  {
+    id: "aux_value",
+    label: "Aux Channel Value",
+    category: "rc",
+    defaultPos: { x: 30, y: 16 },
+    defaultEnabled: false,
+    sample: ch("AUX1:H"),
+  },
+  {
+    id: "rc_channels",
+    label: "RC Channels",
+    category: "rc",
+    defaultPos: { x: 36, y: 11 },
+    defaultEnabled: false,
+    sample: ch("AETR1500"),
+  },
+
+  // ---- Stick overlays ----
+  {
+    id: "stick_overlay_left",
+    label: "Stick Overlay (L)",
+    category: "flight",
+    defaultPos: { x: 8, y: 14 },
+    defaultEnabled: false,
+    sample: [
+      SYM_STICK_OVERLAY_VERTICAL,
+      SYM_STICK_OVERLAY_CENTER,
+      SYM_STICK_OVERLAY_HORIZONTAL,
+    ],
+  },
+  {
+    id: "stick_overlay_right",
+    label: "Stick Overlay (R)",
+    category: "flight",
+    defaultPos: { x: 40, y: 14 },
+    defaultEnabled: false,
+    sample: [
+      SYM_STICK_OVERLAY_VERTICAL,
+      SYM_STICK_OVERLAY_CENTER,
+      SYM_STICK_OVERLAY_HORIZONTAL,
+    ],
+  },
+
+  // ---- Navigation extras ----
+  {
+    id: "up_down_reference",
+    label: "Up/Down Reference",
+    category: "nav",
+    defaultPos: { x: 2, y: 5 },
+    defaultEnabled: false,
+    sample: [SYM_ARROW_SMALL_UP, SYM_ARROW_SMALL_DOWN],
+  },
+
+  // ---- Custom messages (text editable) ----
+  {
+    id: "custom_msg0",
+    label: "Custom Message 1",
+    category: "status",
+    defaultPos: { x: 1, y: 18 },
+    defaultEnabled: false,
+    sample: ch("CUSTOM MSG 1"),
+    editableText: true,
+    maxTextLen: 20,
+  },
+  {
+    id: "custom_msg1",
+    label: "Custom Message 2",
+    category: "status",
+    defaultPos: { x: 1, y: 19 },
+    defaultEnabled: false,
+    sample: ch("CUSTOM MSG 2"),
+    editableText: true,
+    maxTextLen: 20,
+  },
+  {
+    id: "custom_msg2",
+    label: "Custom Message 3",
+    category: "status",
+    defaultPos: { x: 30, y: 18 },
+    defaultEnabled: false,
+    sample: ch("CUSTOM MSG 3"),
+    editableText: true,
+    maxTextLen: 20,
+  },
+  {
+    id: "custom_msg3",
+    label: "Custom Message 4",
+    category: "status",
+    defaultPos: { x: 30, y: 19 },
+    defaultEnabled: false,
+    sample: ch("CUSTOM MSG 4"),
+    editableText: true,
+    maxTextLen: 20,
+  },
+  {
+    id: "custom_serial_text",
+    label: "Serial-Driven Text",
+    category: "status",
+    defaultPos: { x: 1, y: 17 },
+    defaultEnabled: false,
+    sample: ch("SERIAL TEXT"),
+    editableText: true,
+    maxTextLen: 30,
   },
 ];
 

@@ -9,7 +9,15 @@ import {
 
 describe("OSD element schema", () => {
   it("has a stable element count (catches accidental deletions)", () => {
-    expect(elementCount()).toBeGreaterThanOrEqual(25);
+    expect(elementCount()).toBeGreaterThanOrEqual(60);
+  });
+
+  it("every editable-text element has a maxTextLen", () => {
+    for (const e of OSD_ELEMENTS) {
+      if (e.editableText) {
+        expect(e.maxTextLen).toBeGreaterThan(0);
+      }
+    }
   });
 
   it("grid is 53×20", () => {

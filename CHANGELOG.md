@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.22] - 2026-04-22
+
+### Added — MCM (analog OSD) layer upload
+
+- **`+ MCM` button in the LayersPanel** opens a file-drop form for .mcm (MAX7456-era analog OSD) fonts. Mirrors the TTF form's shape: file picker, target subset (ALL / characters / letters / lowercase / numbers / specials), glyph color, outline color. Edit pencil on existing MCM layers works the same way as TTF and bitmap.
+- **Unlocks MCM → HD BMP conversion** as a one-stop workflow: drop a .mcm, pick "All glyphs", optionally recolor, download `BTFL_000.bmp`. Analog tiles upscale cleanly 2× (nearest-neighbor) into the 24×36 HD slot — no interpolation, pixel-perfect. Means pilots can port a beloved analog aesthetic onto their HDZero goggles without redrawing anything.
+- Closes the last unshipped item on the Phase 2.x follow-up queue (originally "MCM layer UI").
+
+### Implementation
+
+- `src/ui/font-editor/McmLayerForm.tsx` — the new form component. Dual-mode (create + edit), structured like `TtfLayerForm` but minus the palette / size / outline-thickness / v-stretch fields since MCM is fixed-size and 2-color.
+- `src/ui/font-editor/LayersPanel.tsx` — adds `+ MCM` next to `+ TTF`, tracks `mcmFormOpen` state, renders the form for new + edit flows, includes `layer.kind === "mcm"` in the pencil-edit condition.
+- **Zero backend changes.** `parseMcm`, `McmLayer` in the project schema, the `case "mcm"` in `compose()`, and `useResolvedAssets`'s MCM branch have all existed since Phase 1 — this release just hooks a form to the already-wired pipeline. 148 tests still green, no new tests needed since MCM parsing was already covered.
+
+### Bumped
+
+- `package.json` version `0.2.21` → `0.2.22`.
+
 ## [0.2.21] - 2026-04-22
 
 ### Fixed

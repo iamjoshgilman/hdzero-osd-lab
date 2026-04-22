@@ -11,6 +11,7 @@ import { FileDrop } from "@/ui/shared/FileDrop";
 import { Button } from "@/ui/shared/Button";
 import { TtfLayerForm } from "./TtfLayerForm";
 import { BitmapLayerForm } from "./BitmapLayerForm";
+import { McmLayerForm } from "./McmLayerForm";
 import { useResolvedAssets } from "@/ui/hooks/useResolvedAssets";
 import type { BitmapLayer } from "@/state/project";
 
@@ -19,6 +20,7 @@ export function LayersPanel() {
   const overrideEntries = useComputed(() => Object.entries(project.value.font.overrides));
   const { layerErrors, loading } = useResolvedAssets();
   const [ttfFormOpen, setTtfFormOpen] = useState<boolean>(false);
+  const [mcmFormOpen, setMcmFormOpen] = useState<boolean>(false);
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
 
   const addBaseBmp = async (file: File) => {
@@ -112,20 +114,40 @@ export function LayersPanel() {
           <h2 class="text-xs font-mono uppercase tracking-wider text-slate-400">
             Layers ({layers.value.length})
           </h2>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setEditingLayerId(null);
-              setTtfFormOpen((x) => !x);
-            }}
-            class="!px-2 !py-1 !text-[10px]"
-          >
-            {ttfFormOpen && !editingLayerId ? "− TTF" : "+ TTF"}
-          </Button>
+          <div class="flex gap-1">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setEditingLayerId(null);
+                setMcmFormOpen(false);
+                setTtfFormOpen((x) => !x);
+              }}
+              class="!px-2 !py-1 !text-[10px]"
+            >
+              {ttfFormOpen && !editingLayerId ? "− TTF" : "+ TTF"}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setEditingLayerId(null);
+                setTtfFormOpen(false);
+                setMcmFormOpen((x) => !x);
+              }}
+              class="!px-2 !py-1 !text-[10px]"
+              title="Add an analog MAX7456 font (.mcm) as a layer"
+            >
+              {mcmFormOpen && !editingLayerId ? "− MCM" : "+ MCM"}
+            </Button>
+          </div>
         </div>
         {ttfFormOpen && !editingLayerId && (
           <div class="mb-3">
             <TtfLayerForm onClose={() => setTtfFormOpen(false)} />
+          </div>
+        )}
+        {mcmFormOpen && !editingLayerId && (
+          <div class="mb-3">
+            <McmLayerForm onClose={() => setMcmFormOpen(false)} />
           </div>
         )}
         {editingLayerId &&
@@ -135,6 +157,7 @@ export function LayersPanel() {
             const close = () => {
               setEditingLayerId(null);
               setTtfFormOpen(false);
+              setMcmFormOpen(false);
             };
             if (editing.kind === "ttf") {
               return (
@@ -147,6 +170,13 @@ export function LayersPanel() {
               return (
                 <div class="mb-3">
                   <BitmapLayerForm editing={editing} onClose={close} />
+                </div>
+              );
+            }
+            if (editing.kind === "mcm") {
+              return (
+                <div class="mb-3">
+                  <McmLayerForm editing={editing} onClose={close} />
                 </div>
               );
             }
@@ -208,11 +238,14 @@ export function LayersPanel() {
                       ▼
                     </Button>
                   </div>
-                  {(layer.kind === "ttf" || layer.kind === "bitmap") && (
+                  {(layer.kind === "ttf" ||
+                    layer.kind === "bitmap" ||
+                    layer.kind === "mcm") && (
                     <Button
                       variant="secondary"
                       onClick={() => {
                         setTtfFormOpen(false);
+                        setMcmFormOpen(false);
                         setEditingLayerId(
                           editingLayerId === layer.id ? null : layer.id,
                         );

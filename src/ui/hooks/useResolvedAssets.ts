@@ -11,12 +11,13 @@ import { decodeBmp, normalizeHdOsdFont } from "@/loaders/bmp";
 import { imageRgbaToTile } from "@/loaders/image-to-tile";
 import { rasterizeTtfSubset } from "@/loaders/ttf";
 import { createRng } from "@/compositor/palette";
-import { GLYPH_SUBSETS } from "@/compositor/constants";
+import { GLYPH_SUBSETS, LOGO_SIZE } from "@/compositor/constants";
 import {
   emptyResolvedAssets,
   type ResolvedAssets,
 } from "@/compositor/compose";
-import type { ProjectDoc, TtfLayer } from "@/state/project";
+import type { RgbaImage } from "@/compositor/types";
+import type { LogoLayer, ProjectDoc, TtfLayer } from "@/state/project";
 
 export interface ResolvedAssetsState {
   assets: Signal<ResolvedAssets>;
@@ -53,6 +54,7 @@ export function useResolvedAssets(): ResolvedAssetsState {
         const next = emptyResolvedAssets();
         await loadBitmapLayers(doc, next, errs);
         await loadTtfLayers(doc, next, errs);
+        await loadLogoLayers(doc, next, errs);
         await loadOverrideTiles(doc, next);
         if (!cancelled) {
           state.assets.value = next;
@@ -157,6 +159,88 @@ async function loadTtfLayers(
       console.error(`TTF layer "${layer.id}" failed to rasterize:`, err);
     }
   }
+}
+
+/**
+ * Decode a user's uploaded logo image, scale it to the target slot dimensions
+ * (aspect-preserved, letterboxed with chroma-gray), and hand the compositor an
+ * RGBA buffer it can blit into codes 160..255 / 91..95 / 257..296.
+ */
+async function loadLogoLayers(
+  doc: ProjectDoc,
+  out: ResolvedAssets,
+  errs: Record<string, string>,
+): Promise<void> {
+  for (const layer of doc.font.layers) {
+    if (layer.kind !== "logo") continue;
+    if (!layer.enabled) continue;
+    if (layer.source.kind !== "user") continue;
+    const rec = await getAsset(layer.source.hash);
+    if (!rec) {
+      errs[layer.id] = "asset not found in IndexedDB";
+      continue;
+    }
+    try {
+      const sized = await scaleImageToLogoSlot(rec.bytes, rec.mime, layer.slot);
+      out.logo.set(layer.id, sized);
+    } catch (err) {
+      errs[layer.id] = err instanceof Error ? err.message : String(err);
+    }
+  }
+}
+
+/**
+ * Fit-scale an arbitrary user image into the exact pixel dimensions the
+ * compositor expects for a given logo slot. Preserves aspect ratio;
+ * non-matching inputs get letterboxed onto chroma-gray (transparent on the
+ * goggle). Transparent-PNG inputs likewise resolve to chroma-gray in the
+ * untouched regions so compositing on-goggle looks right.
+ */
+async function scaleImageToLogoSlot(
+  bytes: ArrayBuffer,
+  mime: string,
+  slot: LogoLayer["slot"],
+): Promise<RgbaImage> {
+  const target = LOGO_SIZE[slot];
+  const blob = new Blob([bytes], { type: mime || "image/png" });
+  const src = await createImageBitmap(blob);
+  const canvas = new OffscreenCanvas(target.w, target.h);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    src.close();
+    throw new Error("logo scaling failed: OffscreenCanvas 2D context unavailable");
+  }
+  ctx.fillStyle = "rgb(127,127,127)";
+  ctx.fillRect(0, 0, target.w, target.h);
+  // Aspect-fit (contain) — preserves the whole source image with chroma-gray
+  // letterbox bars. Cover-fit would crop details; fit feels safer for logos.
+  const srcAR = src.width / src.height;
+  const tgtAR = target.w / target.h;
+  let dw: number;
+  let dh: number;
+  let dx: number;
+  let dy: number;
+  if (srcAR > tgtAR) {
+    dw = target.w;
+    dh = target.w / srcAR;
+    dx = 0;
+    dy = (target.h - dh) / 2;
+  } else {
+    dh = target.h;
+    dw = target.h * srcAR;
+    dx = (target.w - dw) / 2;
+    dy = 0;
+  }
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(src, dx, dy, dw, dh);
+  src.close();
+  const img = ctx.getImageData(0, 0, target.w, target.h);
+  return {
+    width: target.w,
+    height: target.h,
+    data: new Uint8ClampedArray(img.data.buffer),
+  };
 }
 
 async function rasterizeOneTtfLayer(

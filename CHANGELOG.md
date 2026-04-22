@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.12] - 2026-04-22
+
+### Fixed
+
+- **Logo layers now actually render.** `useResolvedAssets` was missing a `loadLogoLayers` step, so logo uploads from the Decoration tab would appear in the project's layer list but `compose()`'s `applyLogoLayer` would silently skip them (because `assets.logo.get(layer.id)` was always `undefined`). Classic "plumbed halfway" — backend support has existed since v0.1.0, UI shipped v0.2.11, but the wire between them was missing.
+- New `scaleImageToLogoSlot()` helper — decodes the uploaded image via `createImageBitmap`, letterboxes it into the exact slot dimensions (576×144 / 240×144 / 120×36) preserving aspect ratio, letterbox bars are chroma-gray so they stay transparent on-goggle. Handles PNGs with per-pixel alpha by compositing onto chroma-gray first so transparent PNG regions resolve to the goggle's transparent color.
+- Logo layer errors now also surface via `layerErrors` the same way bitmap/TTF errors do — missing assets, decode failures, canvas issues all get a red-outlined layer row with the error message.
+
+### Bumped
+
+- `package.json` version `0.2.11` → `0.2.12`.
+
 ## [0.2.11] - 2026-04-22
 
 ### Added — Decoration tab with logo-slot uploaders

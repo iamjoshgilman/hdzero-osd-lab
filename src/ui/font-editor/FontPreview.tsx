@@ -46,7 +46,12 @@ export function FontPreview() {
   const [showOverlay, setShowOverlay] = useState<boolean>(false);
   const [bgMode, setBgMode] = useState<PreviewBg>("chroma");
 
+  const hasLayers = useComputed(() => project.value.font.layers.length > 0);
   const atlas = useComputed(() => compose(project.value, assets.value));
+
+  if (!hasLayers.value) {
+    return <EmptyFontState />;
+  }
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -192,6 +197,38 @@ function rgbToRgbaWithBg(
     rgba[j + 3] = 255;
   }
   return rgba;
+}
+
+/**
+ * Shown in place of the atlas canvas when the project has zero layers.
+ * Occupies roughly the same footprint so the page doesn't jump around when
+ * the user drops their first file. Pitches both upload paths and the MCM→HD
+ * conversion trick so the MCM discoverability doesn't depend on the user
+ * opening the left panel and spotting the "+ MCM" button.
+ */
+function EmptyFontState() {
+  return (
+    <div
+      class="border border-dashed border-slate-700 bg-slate-900/40 rounded flex flex-col items-center justify-center gap-5 text-center px-10 py-12 font-mono"
+      style={{
+        width: `${FONT_SIZE.w}px`,
+        minHeight: `${FONT_SIZE.h / 3}px`,
+      }}
+    >
+      <div class="text-osd-mint text-xl">No font loaded</div>
+      <p class="text-sm text-slate-300 leading-relaxed max-w-sm">
+        Drop a <span class="text-osd-cyan">384×1152 BMP</span> or analog{" "}
+        <span class="text-osd-cyan">.mcm</span> file in the left panel to get
+        started, or pick one from the community sample dropdown.
+      </p>
+      <div class="h-px w-24 bg-slate-700" />
+      <p class="text-xs text-slate-500 leading-relaxed max-w-sm">
+        <span class="text-osd-amber">Tip:</span> drop any analog MAX7456 .mcm
+        on the base drop zone and it upscales pixel-perfect into an HD font.
+        Great for porting an old analog aesthetic onto your HDZero goggles.
+      </p>
+    </div>
+  );
 }
 
 function drawGrid(ctx: CanvasRenderingContext2D): void {

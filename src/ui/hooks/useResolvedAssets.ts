@@ -1,7 +1,7 @@
 // React hook that walks the ProjectDoc, fetches every referenced asset from
 // IndexedDB, runs the appropriate loader, and returns a ResolvedAssets bundle
-// ready for compose(). For v0.1.0 only bitmap layers are supported in the UI;
-// mcm/ttf/logo will land in v0.1.x as those editors come online.
+// ready for compose(). Handles bitmap, TTF, MCM, and logo layers plus
+// per-tile overrides.
 
 import { useEffect } from "preact/hooks";
 import { signal, type Signal } from "@preact/signals";
@@ -10,6 +10,7 @@ import { getAsset } from "@/state/assets";
 import { decodeBmp, normalizeHdOsdFont } from "@/loaders/bmp";
 import { imageRgbaToTile } from "@/loaders/image-to-tile";
 import { rasterizeTtfSubset } from "@/loaders/ttf";
+import { parseMcm } from "@/loaders/mcm";
 import { createRng } from "@/compositor/palette";
 import { GLYPH_SUBSETS, LOGO_SIZE } from "@/compositor/constants";
 import {
@@ -54,6 +55,7 @@ export function useResolvedAssets(): ResolvedAssetsState {
         const next = emptyResolvedAssets();
         await loadBitmapLayers(doc, next, errs);
         await loadTtfLayers(doc, next, errs);
+        await loadMcmLayers(doc, next, errs);
         await loadLogoLayers(doc, next, errs);
         await loadOverrideTiles(doc, next);
         if (!cancelled) {
@@ -157,6 +159,44 @@ async function loadTtfLayers(
       const msg = err instanceof Error ? err.message : String(err);
       errs[layer.id] = msg;
       console.error(`TTF layer "${layer.id}" failed to rasterize:`, err);
+    }
+  }
+}
+
+/**
+ * Parse every enabled MCM layer into its TileMap. Each layer gets its own
+ * entry keyed by layer.id (not asset hash) because the same .mcm can be
+ * colored differently per layer — parseMcm bakes the ink colors into the
+ * output tiles.
+ */
+async function loadMcmLayers(
+  doc: ProjectDoc,
+  out: ResolvedAssets,
+  errs: Record<string, string>,
+): Promise<void> {
+  for (const layer of doc.font.layers) {
+    if (layer.kind !== "mcm") continue;
+    if (!layer.enabled) continue;
+    if (layer.source.kind !== "user") continue;
+    const rec = await getAsset(layer.source.hash);
+    if (!rec) {
+      errs[layer.id] = "asset not found in IndexedDB";
+      continue;
+    }
+    try {
+      const text = new TextDecoder().decode(rec.bytes);
+      const tiles = parseMcm(text, {
+        glyphColor: layer.glyphColor,
+        outlineColor: layer.outlineColor,
+      });
+      if (tiles.size === 0) {
+        errs[layer.id] =
+          "no glyphs parsed from .mcm (check the file isn't a binary dump and has the 64-line-per-glyph ASCII format)";
+        continue;
+      }
+      out.mcm.set(layer.id, tiles);
+    } catch (err) {
+      errs[layer.id] = err instanceof Error ? err.message : String(err);
     }
   }
 }

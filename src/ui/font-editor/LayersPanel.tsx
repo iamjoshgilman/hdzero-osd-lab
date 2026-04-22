@@ -13,7 +13,7 @@ import { TtfLayerForm } from "./TtfLayerForm";
 import { BitmapLayerForm } from "./BitmapLayerForm";
 import { McmLayerForm } from "./McmLayerForm";
 import { useResolvedAssets } from "@/ui/hooks/useResolvedAssets";
-import type { BitmapLayer } from "@/state/project";
+import type { BitmapLayer, McmLayer } from "@/state/project";
 
 export function LayersPanel() {
   const layers = useComputed(() => project.value.font.layers);
@@ -23,8 +23,35 @@ export function LayersPanel() {
   const [mcmFormOpen, setMcmFormOpen] = useState<boolean>(false);
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
 
-  const addBaseBmp = async (file: File) => {
+  /**
+   * Base-font drop. Branches on file extension so pilots can drop either a
+   * 384×1152 HD BMP or an analog .mcm font here without thinking about which
+   * widget to use — both cases land as a full-font layer covering all glyph
+   * codes. For MCM, `subset: "ALL"` copies every analog glyph (0..255)
+   * verbatim into the HD atlas with the parser's 2× nearest-neighbor upscale.
+   */
+  const addBaseFont = async (file: File) => {
     const buf = await file.arrayBuffer();
+    const isMcm = /\.mcm$/i.test(file.name);
+    if (isMcm) {
+      const hash = await putAsset(buf, {
+        name: file.name,
+        mime: file.type || "text/plain",
+      });
+      mutate((doc) => {
+        const layer: McmLayer = {
+          id: `mcm-${Date.now()}`,
+          kind: "mcm",
+          source: { kind: "user", hash, name: file.name, mime: file.type || "text/plain" },
+          subset: "ALL",
+          glyphColor: "#E0E0E0",
+          outlineColor: "#000000",
+          enabled: true,
+        };
+        doc.font.layers.push(layer);
+      });
+      return;
+    }
     const hash = await putAsset(buf, { name: file.name, mime: file.type || "image/bmp" });
     mutate((doc) => {
       const layer: BitmapLayer = {
@@ -102,9 +129,9 @@ export function LayersPanel() {
       <section>
         <h2 class="text-xs font-mono uppercase tracking-wider text-slate-400 mb-2">Base font</h2>
         <FileDrop
-          accept=".bmp,image/bmp"
-          label="Drop a 384×1152 BMP"
-          onFile={addBaseBmp}
+          accept=".bmp,image/bmp,.mcm,text/plain"
+          label="Drop a 384×1152 BMP or analog .mcm"
+          onFile={addBaseFont}
         />
         <SampleFontPicker onPick={loadSample} />
       </section>

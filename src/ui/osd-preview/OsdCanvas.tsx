@@ -84,6 +84,7 @@ export function OsdCanvas() {
   const { assets, loading, error, bgImage } = useResolvedAssets();
   const atlas = useComputed(() => compose(project.value, assets.value));
   const selected = useComputed(() => selectedOsdElement.value);
+  const hasLayers = useComputed(() => project.value.font.layers.length > 0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragStateRef = useRef<DragState | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -419,6 +420,10 @@ export function OsdCanvas() {
     setDrag(null);
   };
 
+  if (!hasLayers.value) {
+    return <EmptyOsdState />;
+  }
+
   return (
     <div class="flex flex-col items-center gap-3 w-full">
       <div class="flex gap-4 items-center text-xs font-mono text-slate-400 flex-wrap">
@@ -515,6 +520,38 @@ export function OsdCanvas() {
       <p class="text-[10px] font-mono text-slate-500">
         {OSD_ELEMENTS.filter((e) => effectivePosition(e, project.value).enabled).length} of{" "}
         {OSD_ELEMENTS.length} elements enabled · 53×20 grid ({OSD_W_PX}×{OSD_H_PX} native)
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Shown in place of the OSD simulator canvas when no font is loaded. Mirrors
+ * the Font tab's empty-state pattern and pitches the FPV-background feature
+ * so pilots know that's an option before they even have a font to preview
+ * over it.
+ */
+function EmptyOsdState() {
+  return (
+    <div
+      class="border border-dashed border-slate-700 bg-slate-900/40 rounded flex flex-col items-center justify-center gap-5 text-center px-10 py-14 font-mono w-full max-w-3xl"
+      style={{ aspectRatio: `${OSD_W_PX} / ${OSD_H_PX}` }}
+    >
+      <div class="text-osd-mint text-xl">No font loaded</div>
+      <p class="text-sm text-slate-300 leading-relaxed max-w-lg">
+        The OSD simulator needs a font to render glyphs over. Head to the{" "}
+        <span class="text-osd-cyan">Font</span> tab and drop a{" "}
+        <span class="text-osd-cyan">.bmp</span> or{" "}
+        <span class="text-osd-cyan">.mcm</span>, then come back here to lay
+        out your elements.
+      </p>
+      <div class="h-px w-24 bg-slate-700" />
+      <p class="text-xs text-slate-500 leading-relaxed max-w-lg">
+        <span class="text-osd-amber">Tip:</span> once a font is loaded, this
+        tab lets you preview the OSD over a real FPV background. Drop your
+        own DVR still frame, or pick one of the built-in presets (skyscraper
+        dive, mountain surfing, bando, dusk low-light) to see exactly how
+        your layout reads in-flight.
       </p>
     </div>
   );

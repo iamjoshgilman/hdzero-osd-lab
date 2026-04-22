@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.23] - 2026-04-22
+
+### Fixed
+
+- **MCM layers now actually render.** The `+ MCM` button shipped in v0.2.22 created layers correctly, but `useResolvedAssets` was missing a `loadMcmLayers` step — so dropped .mcm files landed in the project as layers but the compositor's MCM case silently skipped them because `assets.mcm` stayed empty. Same "plumbed halfway" shape as the v0.2.12 logo-render bug. Backend support has existed since Phase 1; this release wires the last mile.
+
+### Added — MCM workflow discoverability + empty-state placeholders
+
+- **Base-font drop zone now accepts `.mcm` too.** File-extension branch: `.bmp` → bitmap layer (unchanged), `.mcm` → MCM layer with subset=ALL and default ink colors. Makes whole-font analog → HD conversion discoverable as a first-class action, not a layer trick. The `+ MCM` button in the Layers section stays for partial-subset use cases (letters only, specials only, etc).
+- **"No font loaded" placeholder on the Font tab** when the project has zero layers. Dashed-border box occupying roughly the atlas footprint with directions (drop a BMP or MCM, pick a sample) plus a tip pitching the MCM→HD upscale trick so analog-font ports don't stay hidden behind an empty default.
+- **"No font loaded" placeholder on the OSD Preview tab** with a tip highlighting the FPV-background feature (DVR still upload or one of four built-in presets — skyscraper dive, mountain surfing, bando, dusk low-light) so pilots know that's available before they even load a font.
+- **Removed auto-load of the ondrascz sample font on first visit.** Fresh projects start empty — pilots pick their own base rather than opening to a random default whose relevance isn't obvious. The community sample dropdown in the left panel is still there when they want a starter. `⌫ New` now also lands on the empty state instead of re-seeding a sample.
+
+### Bumped
+
+- `package.json` version `0.2.22` → `0.2.23`.
+
 ## [0.2.22] - 2026-04-22
 
 ### Added — MCM (analog OSD) layer upload

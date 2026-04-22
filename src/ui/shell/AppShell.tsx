@@ -1,7 +1,6 @@
 import { useEffect } from "preact/hooks";
 import { useComputed } from "@preact/signals";
 import { project, undo, redo, canUndo, canRedo } from "@/state/store";
-import { addSampleFontAsBaseLayer } from "@/state/bootstrap";
 import {
   hydrateFromPersistence,
   installAutoSave,
@@ -27,20 +26,14 @@ export function AppShell() {
   const { assets } = useResolvedAssets();
   const hasLayers = useComputed(() => project.value.font.layers.length > 0);
 
-  // Boot sequence: install auto-save first (it skips until hydration completes,
-  // so it can't race the load), then try to restore the last-saved project
-  // from IndexedDB. Only if there's no saved project do we fall back to the
-  // MIT-safe ondrascz sample so the canvas has something to render instead
-  // of a blank chroma-gray atlas.
+  // Boot sequence: install auto-save first (skips until hydration completes so
+  // it can't race the load), then try to restore the last-saved project from
+  // IndexedDB. If nothing's saved, the canvas shows an empty-state placeholder
+  // (see FontPreview) rather than auto-loading a random font — pilots showed
+  // up not knowing what the default meant, so we let them pick.
   useEffect(() => {
     installAutoSave();
-    hydrateFromPersistence().then((restored) => {
-      if (!restored && project.value.font.layers.length === 0) {
-        addSampleFontAsBaseLayer("ondrascz-color.bmp", "ondrascz color (default)").catch(
-          (err) => console.error("auto-bootstrap failed:", err),
-        );
-      }
-    });
+    void hydrateFromPersistence();
   }, []);
 
   const handleNewProject = async () => {
@@ -49,12 +42,6 @@ export function AppShell() {
     );
     if (!ok) return;
     await resetProjectAndPersistence();
-    // Re-seed with the sample so the first render has a base layer, mirroring
-    // the fresh-install path.
-    await addSampleFontAsBaseLayer(
-      "ondrascz-color.bmp",
-      "ondrascz color (default)",
-    ).catch((err) => console.error("post-reset bootstrap failed:", err));
   };
 
   const downloadBmp = () => {

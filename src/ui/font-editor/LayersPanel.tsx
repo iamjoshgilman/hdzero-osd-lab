@@ -10,6 +10,7 @@ import { selectedGlyph } from "@/state/ui-state";
 import { FileDrop } from "@/ui/shared/FileDrop";
 import { Button } from "@/ui/shared/Button";
 import { TtfLayerForm } from "./TtfLayerForm";
+import { BitmapLayerForm } from "./BitmapLayerForm";
 import { useResolvedAssets } from "@/ui/hooks/useResolvedAssets";
 import type { BitmapLayer } from "@/state/project";
 
@@ -129,21 +130,27 @@ export function LayersPanel() {
         )}
         {editingLayerId &&
           (() => {
-            const editing = layers.value.find(
-              (l) => l.id === editingLayerId && l.kind === "ttf",
-            );
-            if (!editing || editing.kind !== "ttf") return null;
-            return (
-              <div class="mb-3">
-                <TtfLayerForm
-                  editing={editing}
-                  onClose={() => {
-                    setEditingLayerId(null);
-                    setTtfFormOpen(false);
-                  }}
-                />
-              </div>
-            );
+            const editing = layers.value.find((l) => l.id === editingLayerId);
+            if (!editing) return null;
+            const close = () => {
+              setEditingLayerId(null);
+              setTtfFormOpen(false);
+            };
+            if (editing.kind === "ttf") {
+              return (
+                <div class="mb-3">
+                  <TtfLayerForm editing={editing} onClose={close} />
+                </div>
+              );
+            }
+            if (editing.kind === "bitmap") {
+              return (
+                <div class="mb-3">
+                  <BitmapLayerForm editing={editing} onClose={close} />
+                </div>
+              );
+            }
+            return null;
           })()}
         {layers.value.length === 0 && (
           <p class="text-xs text-slate-500">Upload a base font above or add a TTF layer to get started.</p>
@@ -201,7 +208,7 @@ export function LayersPanel() {
                       ▼
                     </Button>
                   </div>
-                  {layer.kind === "ttf" && (
+                  {(layer.kind === "ttf" || layer.kind === "bitmap") && (
                     <Button
                       variant="secondary"
                       onClick={() => {

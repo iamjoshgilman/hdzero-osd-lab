@@ -1,6 +1,6 @@
 {
   "name": "hdzero-osd-lab",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "private": true,
   "type": "module",
   "description": "Browser-based studio for designing HD OSD fonts and Craft Name decorations for HDZero FPV goggles running Betaflight.",

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.10] - 2026-04-22
+
+### Added — Edit bitmap layers in place
+
+- **✎ pencil button** now appears on bitmap layer rows (previously TTF-only).
+- New `BitmapLayerForm` lets users swap the underlying BMP without losing the layer's stack position. Replace via file drop, via the built-in sample-font dropdown, or change the target subset (ALL / BTFL_LETTERS / BTFL_NUMBERS / BTFL_SPECIALS / BTFL_CHARACTERS / BTFL_LOGO / BTFL_MINILOGO) — all without deleting and re-adding.
+- Save only commits when something actually changed (prevents no-op undo entries).
+- The source picker shows the "pending" new file before commit, with an **undo** link to revert the replacement choice if the user reconsiders mid-flow.
+
+### Bumped
+
+- `package.json` version `0.2.9` → `0.2.10`.
+
 ## [0.2.9] - 2026-04-22
 
 ### Added — Layer reordering

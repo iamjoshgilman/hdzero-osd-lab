@@ -2,6 +2,11 @@ import { useEffect } from "preact/hooks";
 import { useComputed } from "@preact/signals";
 import { project, undo, redo, canUndo, canRedo } from "@/state/store";
 import { addSampleFontAsBaseLayer } from "@/state/bootstrap";
+import {
+  hydrateFromPersistence,
+  installAutoSave,
+  resetProjectAndPersistence,
+} from "@/state/autosave";
 import { currentView } from "@/state/ui-state";
 import { compose } from "@/compositor/compose";
 import { writeBmp24 } from "@/encoders/bmp";
@@ -16,23 +21,41 @@ import { OsdCanvas } from "@/ui/osd-preview/OsdCanvas";
 import { ElementLibrary } from "@/ui/osd-preview/ElementLibrary";
 import { ResourcesPage } from "@/ui/resources/ResourcesPage";
 import { DecorationPage } from "@/ui/decoration/DecorationPage";
+import { HowToPage } from "@/ui/howto/HowToPage";
 
 export function AppShell() {
   const { assets } = useResolvedAssets();
   const hasLayers = useComputed(() => project.value.font.layers.length > 0);
 
-  // First-run bootstrap: if the project is completely empty on mount, seed it
-  // with the MIT-safe ondrascz sample so the canvas has something to render
-  // instead of a blank chroma-gray atlas. When persistence lands (v0.3.x) this
-  // check will move to a `meta.initialized` flag so we don't clobber returning
-  // users' saved projects.
+  // Boot sequence: install auto-save first (it skips until hydration completes,
+  // so it can't race the load), then try to restore the last-saved project
+  // from IndexedDB. Only if there's no saved project do we fall back to the
+  // MIT-safe ondrascz sample so the canvas has something to render instead
+  // of a blank chroma-gray atlas.
   useEffect(() => {
-    if (project.value.font.layers.length === 0) {
-      addSampleFontAsBaseLayer("ondrascz-color.bmp", "ondrascz color (default)").catch(
-        (err) => console.error("auto-bootstrap failed:", err),
-      );
-    }
+    installAutoSave();
+    hydrateFromPersistence().then((restored) => {
+      if (!restored && project.value.font.layers.length === 0) {
+        addSampleFontAsBaseLayer("ondrascz-color.bmp", "ondrascz color (default)").catch(
+          (err) => console.error("auto-bootstrap failed:", err),
+        );
+      }
+    });
   }, []);
+
+  const handleNewProject = async () => {
+    const ok = window.confirm(
+      "Start a new project? This clears your current layers, OSD layout, tints, and custom text. Uploaded assets stay in your browser cache and can be re-added as layers.",
+    );
+    if (!ok) return;
+    await resetProjectAndPersistence();
+    // Re-seed with the sample so the first render has a base layer, mirroring
+    // the fresh-install path.
+    await addSampleFontAsBaseLayer(
+      "ondrascz-color.bmp",
+      "ondrascz color (default)",
+    ).catch((err) => console.error("post-reset bootstrap failed:", err));
+  };
 
   const downloadBmp = () => {
     const atlas = compose(project.value, assets.value);
@@ -50,15 +73,21 @@ export function AppShell() {
 
   return (
     <div class="flex flex-col h-full bg-slate-950 text-slate-100">
-      <TopBar onDownload={downloadBmp} canDownload={hasLayers.value} />
+      <TopBar
+        onDownload={downloadBmp}
+        canDownload={hasLayers.value}
+        onNewProject={handleNewProject}
+      />
       <TabBar />
       <main class="flex flex-1 overflow-hidden">
-        {/* LayersPanel pinned left on project-editing tabs; hidden on Resources (read-only). */}
-        {view.value !== "resources" && <LayersPanel />}
+        {/* LayersPanel pinned left on project-editing tabs; hidden on Resources and
+            How-To (both read-only content). */}
+        {view.value !== "resources" && view.value !== "howto" && <LayersPanel />}
         <section class="flex-1 overflow-auto p-6 flex justify-center">
           {view.value === "font" && <FontPreview />}
           {view.value === "osd" && <OsdCanvas />}
           {view.value === "decoration" && <DecorationPage />}
+          {view.value === "howto" && <HowToPage />}
           {view.value === "resources" && <ResourcesPage />}
         </section>
         {view.value === "font" && <InspectorPanel />}
@@ -72,9 +101,11 @@ export function AppShell() {
 function TopBar({
   onDownload,
   canDownload,
+  onNewProject,
 }: {
   onDownload: () => void;
   canDownload: boolean;
+  onNewProject: () => void;
 }) {
   return (
     <header class="flex items-center justify-between border-b border-slate-800 px-4 py-2 bg-slate-900">
@@ -85,6 +116,13 @@ function TopBar({
         <span class="text-slate-500 text-xs ml-2 font-normal">v0.1.0</span>
       </h1>
       <div class="flex gap-2">
+        <Button
+          variant="secondary"
+          onClick={onNewProject}
+          title="Start a new project. Clears layers, layout, and custom text. Assets stay cached."
+        >
+          ⌫ New
+        </Button>
         <Button variant="secondary" onClick={undo} disabled={!canUndo()}>
           ↶ Undo
         </Button>

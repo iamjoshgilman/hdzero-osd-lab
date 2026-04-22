@@ -7,7 +7,7 @@ import { signal } from "@preact/signals";
 export const selectedGlyph = signal<number | null>(null);
 
 /** Which major workspace tab is visible. */
-export type ViewMode = "font" | "osd" | "decoration" | "resources";
+export type ViewMode = "font" | "osd" | "decoration" | "howto" | "resources";
 export const currentView = signal<ViewMode>("font");
 
 /** Currently-selected OSD element id (in the OSD Preview tab), or null. */

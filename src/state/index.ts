@@ -1,4 +1,5 @@
-// Track C — see PLAN.md §6 Phase 1.
+// Public surface of the state module — project doc type, reactive store,
+// undo stack, IndexedDB-backed asset cache, JSON persistence.
 export * from "./project";
 export {
   project,

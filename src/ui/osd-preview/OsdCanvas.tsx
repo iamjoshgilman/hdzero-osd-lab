@@ -61,7 +61,12 @@ function effectiveSample(element: OsdElement, doc: ProjectDoc): readonly number[
   const text = override?.customText;
   if (!text) return element.sample;
   const max = element.maxTextLen ?? text.length;
-  const trimmed = text.slice(0, max);
+  // Defense-in-depth: input already uppercases on the way in for upperCaseOnly
+  // fields, but older projects saved before that behavior existed may still
+  // have mixed-case text. Apply the transform again at render time so those
+  // don't render as arrows.
+  const source = element.upperCaseOnly ? text.toUpperCase() : text;
+  const trimmed = source.slice(0, max);
   return Array.from(trimmed, (c) => {
     const code = c.charCodeAt(0);
     return code >= 32 && code <= 126 ? code : 0x20;

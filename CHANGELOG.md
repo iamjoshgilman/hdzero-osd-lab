@@ -7,6 +7,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.20] - 2026-04-22
+
+### Added — Public release prep
+
+- **GitHub Actions build workflow** at `.github/workflows/build.yml`. Runs typecheck + tests + production build on every push and pull request, uploads `dist/` as a downloadable artifact (30-day retention). Unlocks reproducible "deploy a specific commit SHA" for the self-hosted path.
+- **README rewritten for a public audience** — status up to date (Phase 2 complete + follow-up queue shipped), quick-start commands, install-on-goggle recipe, tech stack, honest statement of what's next. CI badge links to the new workflow.
+
+### Removed
+
+- `src/ui/decoration/DecorationStub.tsx` — dead placeholder file from early Phase 3 scaffolding. Was never imported; replaced long ago by the real `DecorationPage`. Deleting now so the public repo doesn't ship confusing "coming in v0.3" dead code.
+
+### Bumped
+
+- `package.json` version `0.2.19` → `0.2.20`.
+
+## [0.2.19] - 2026-04-22
+
+### Added
+
+- **Goggle install section in the How-To tab.** Five-step recipe for copying the exported BMP to `resource/OSD/FC/BTFL_000.bmp` on the HDZero Goggles 2 SD card — firmware version check, export, copy, reboot, troubleshooting checklist for the "I did all that and nothing changed" case. Makes the app a one-stop shop from blank canvas to in-flight font without bouncing to another doc.
+
+### Bumped
+
+- `package.json` version `0.2.18` → `0.2.19`.
+
+## [0.2.18] - 2026-04-22
+
+### Added — How-To tab
+
+- **New How-To tab** between Decoration and Resources with a step-by-step walkthrough of the common workflows: your first font, swapping the base font, TTF palette layers, per-glyph overrides + tints, banner + mini-logo, OSD layout + screenshot export, save/reset/undo. Text-first with inline references to actual button and tab names (no screenshots — the UI is small enough that a clear word beats a screenshot that goes stale the first time a label changes). Section anchor links at the top for quick jumps; tab-link buttons inside steps jump straight to the tab being described.
+
+### Cleaned up
+
+- **Decoration tab copy updated** to drop the "Craft Name designer lands with v0.3.0" placeholder. That use case is covered by the existing Craft Name text input on the OSD Preview tab combined with the mini-logo uploader here — no separate visual designer needed. The tab header now points readers at the actual working flow.
+- PLAN.md's Phase 2.x follow-up queue marked How-To and project persistence as shipped.
+
+### Bumped
+
+- `package.json` version `0.2.17` → `0.2.18`.
+
+## [0.2.17] - 2026-04-22
+
+### Added — Project persistence across reloads
+
+- **Your project now survives a page refresh.** Layers, OSD layout, custom text (Craft Name etc.), per-glyph tints, logo uploads — everything on the `ProjectDoc` is now serialized to IndexedDB on every mutation and restored on boot. Previously only the binary asset cache persisted; the document itself reverted to the default sample font on every refresh. Closes the last major papercut from the Phase 2.x follow-up queue.
+- **New `⌫ New` button in the top bar.** Click it to wipe the current project and persisted state and start fresh on the ondrascz sample font. Requires a confirm — destructive actions need two taps. Uploaded assets stay in the cache so you can re-add them as layers without re-uploading the source files.
+
+### Implementation
+
+- `src/state/project-persist.ts` — separate `hdzero-osd-lab-project` IndexedDB database with a single `project` store keyed by `"current"`. Independent of the `hdzero-osd-lab` assets DB so either can be wiped or migrated without affecting the other.
+- `src/state/autosave.ts` — `installAutoSave()` installs a signals `effect()` that debounce-saves on every `mutate()` (300ms default), and `hydrateFromPersistence()` loads the last-saved doc on boot. The effect defers saves until hydration completes so it can't race the load and clobber good data with the in-memory default.
+- AppShell's boot sequence now: install autosave → hydrate → only fall back to the sample bootstrap if no saved project was found. Saved projects with zero layers (edge case) still trigger a bootstrap so the canvas isn't blank.
+- Corrupt-JSON recovery: if the stored JSON can't parse (e.g. a mid-save crash or a schema mismatch on a downgrade), `loadPersistedProject()` logs a warning and returns null rather than crashing the app on start.
+
+### Tests
+
+- `project-persist.test.ts` — 6 new tests covering empty-store → null, round-trip with layers/tints/custom-text, overwrite semantics, clear, and corrupt-JSON recovery.
+- `autosave.test.ts` — 6 new tests covering the hydration flag, pre-hydration save suppression (guards against the clobber race), debounce collapse, and the `resetProjectAndPersistence` path.
+- 135 → 148. Build 36.47 KB → 37.23 KB gzipped (+0.76 KB for the persistence + autosave modules and the New button wiring).
+
+### Bumped
+
+- `package.json` version `0.2.16` → `0.2.17`.
+
+## [0.2.16] - 2026-04-22
+
+### Fixed
+
+- **Craft Name and Pilot Name now auto-uppercase**, matching real Betaflight Configurator behavior. HD OSD fonts have letter shapes at codes 65..90 (uppercase) and arrow/icon glyphs at 97..122 (lowercase ASCII). Typing a mixed-case callsign like "WhiteRqbbit" rendered the lowercase letters as arrows — confusing and inconsistent with what a pilot would actually see on their goggles. Now the text input force-uppercases as you type, caret position is preserved so mid-word edits don't jump to the end, and the `effectiveSample()` renderer also uppercases defensively so projects saved before this fix still display correctly.
+- Custom Messages stay free-form (no auto-uppercase) — pilots sometimes reach into the 97..122 range on purpose for decoration tricks, and there's no real-hardware parallel to match against.
+
+### Schema
+
+- New `OsdElement.upperCaseOnly?: boolean` flag. Set on `craft_name` and `pilot_name`. Opt-in per element so future additions (serial-driven text etc.) can decide their own case policy.
+
+### Tests
+
+- 135 → 136. New invariant test that `craft_name` and `pilot_name` carry `upperCaseOnly: true` and that Custom Messages don't.
+
+### Bumped
+
+- `package.json` version `0.2.15` → `0.2.16`.
+
 ## [0.2.15] - 2026-04-22
 
 ### Fixed
@@ -516,7 +599,6 @@ Phase 2 is done. The OSD tab is a fully-interactive real-time simulator of what 
 ### Notes
 
 - This is scaffolding only: OSD and Decoration tabs show placeholder screens. v0.2 fills OSD; v0.3 fills Decoration.
-- Background agents for OSD schema research and FPV background sourcing were launched but both stopped after discovering their sandbox denies network access. Doing that research directly in the main thread next.
 
 ## [0.1.1] - 2026-04-21
 
@@ -529,7 +611,7 @@ Phase 2 is done. The OSD tab is a fully-interactive real-time simulator of what 
 
 ## [0.1.0] - 2026-04-21 — Phase 1 "Compositor MVP" complete
 
-### Added — Track D (UI shell)
+### Added — UI shell
 
 - `src/ui/shell/AppShell.tsx` — top-bar (Undo / Redo / Download BTFL_000.bmp), status bar, three-panel layout.
 - `src/ui/font-editor/LayersPanel.tsx` — base-BMP drop zone, layer list with enable-toggle + delete, glyph-override uploader that takes a numeric code plus a PNG/BMP.
@@ -551,7 +633,7 @@ Drop a 384×1152 BMP → it lands in IndexedDB by hash, becomes an `ALL`-subset 
 
 ## [0.0.5] - 2026-04-21
 
-### Added — Track C (state, undo, assets, persistence)
+### Added — State, undo, assets, persistence
 
 - `src/state/store.ts` — reactive project signal (`@preact/signals`). `mutate(fn)` takes a draft-mutator, auto-updates `meta.updatedAt`, and pushes the previous doc onto the undo stack. Exports `undo`, `redo`, `canUndo`, `canRedo`, `replaceProject`, `resetStore`.
 - `src/state/undo.ts` — generic snapshot-based `UndoStack<T>` with configurable limit (default 100 snapshots). `structuredClone` keeps each snapshot independent without an Immer dep.
@@ -562,11 +644,11 @@ Drop a 384×1152 BMP → it lands in IndexedDB by hash, becomes an `ALL`-subset 
 
 ### Notes
 
-- Phase 1 backend is now complete: compositor + loaders + state all land. Next commit spawns Track D (the UI shell) which wires everything into an interactive editor — that ships as v0.1.0.
+- Phase 1 backend is now complete: compositor + loaders + state all land. Next commit brings the UI shell that wires everything into an interactive editor — ships as v0.1.0.
 
 ## [0.0.4] - 2026-04-21
 
-### Added — Track B (loaders)
+### Added — Loaders
 
 - `src/loaders/bmp.ts` — `decodeBmp(ArrayBuffer | Uint8Array) → RgbImage`. Reads 24-bit BI_RGB v3 BMPs, handles both bottom-up and top-down row order, always returns top-down RGB. Round-trip-tested against `writeBmp24` on a 384×1152 atlas byte-for-byte.
 - `src/loaders/mcm.ts` — `parseMcm(text, opts)` parses MAX7456 .mcm analog OSD fonts (256 glyphs, 12×18 px at 2 bits/pixel, `"00"`/`"10"`/else → outline/glyph/transparent), upscales each 2× into 24×36 HD tiles. Custom glyph + outline colors via `opts.glyphColor` / `opts.outlineColor` hex.
@@ -576,12 +658,12 @@ Drop a 384×1152 BMP → it lands in IndexedDB by hash, becomes an `ALL`-subset 
 
 ## [0.0.3] - 2026-04-21
 
-### Added — Track A (compositor core + BMP encoder)
+### Added — Compositor core + BMP encoder
 
 - `src/encoders/bmp.ts` — `writeBmp24(RgbImage) → Uint8Array`. Produces a byte-level-correct 24-bit BMP v3 with proper BITMAPFILEHEADER + BITMAPINFOHEADER, BGR byte order, bottom-up rows, 4-byte row alignment. 384×1152 atlas writes as exactly 1,327,158 bytes (same as pygame's output for SD-card compatibility).
 - `src/compositor/palette.ts` — `parseHex(hex)`, `createRng(seed)`, `resolveColor(palette, rng)`. xorshift32 for deterministic seeded RNG; `null` seed falls through to `Math.random` (matches Python fork's default per-build shuffle).
 - `src/compositor/atlas.ts` — low-level buffer ops: `createAtlas`, `createTile`, `fillRgb`, `blitTile`, `extractTile`, `blitRgbaRegionIntoAtlas` (with full alpha compositing). `TILE_BYTES=2592`, `ATLAS_BYTES=1,327,104` exported for test assertions.
-- `src/compositor/compose.ts` — `compose(ProjectDoc, ResolvedAssets, opts?) → Uint8ClampedArray`. Pure function, no DOM. Applies enabled layers in order; bitmap layers extract subset tiles from 384×1152 sources; mcm/ttf layers consume pre-rendered `TileMap`s produced by Track B; logo layers use the exact strip-wrapping layout from `fontbuilder.py` for `btfl` (576×144), `inav` (240×144), and `mini` (120×36) slots. Overrides always win, applied last.
+- `src/compositor/compose.ts` — `compose(ProjectDoc, ResolvedAssets, opts?) → Uint8ClampedArray`. Pure function, no DOM. Applies enabled layers in order; bitmap layers extract subset tiles from 384×1152 sources; mcm/ttf layers consume pre-rendered `TileMap`s from the loaders module; logo layers use the exact strip-wrapping layout from `fontbuilder.py` for `btfl` (576×144), `inav` (240×144), and `mini` (120×36) slots. Overrides always win, applied last.
 - Test coverage: 39 new cases (BMP encoder 5, palette 16, atlas 11, compose 7). Total project: 52 tests, all green. Typecheck clean.
 
 ## [0.0.2] - 2026-04-21

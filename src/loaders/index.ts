@@ -1,4 +1,5 @@
-// Track B — see PLAN.md §6 Phase 1.
+// Public surface of the loaders module — BMP / MCM / TTF / raw image inputs
+// into the compositor's tile model.
 export { decodeBmp, normalizeHdOsdFont } from "./bmp";
 export { parseMcm } from "./mcm";
 export type { McmLoadOptions } from "./mcm";

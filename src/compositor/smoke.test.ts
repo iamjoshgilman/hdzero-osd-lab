@@ -1,4 +1,5 @@
-// Smoke test proving the test harness works. Real tests land in v0.1 Track A.
+// Smoke test proving the test harness is wired up. Substantive compositor
+// tests live next to their modules (palette.test.ts, atlas.test.ts, etc).
 import { describe, it, expect } from "vitest";
 
 describe("scaffold", () => {

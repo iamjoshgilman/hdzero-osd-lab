@@ -81,4 +81,15 @@ describe("OSD element schema", () => {
       expect(seen.has(cat)).toBe(true);
     }
   });
+
+  it("craft name and pilot name are uppercase-only (matches Betaflight)", () => {
+    // Real Betaflight Configurator uppercases these fields; HD OSD fonts have
+    // letter shapes at 65..90 and arrow/icon glyphs at 97..122, so typing a
+    // lowercase callsign would otherwise render as arrows.
+    expect(lookupElement("craft_name")?.upperCaseOnly).toBe(true);
+    expect(lookupElement("pilot_name")?.upperCaseOnly).toBe(true);
+    // Custom Messages stay free-form — pilots sometimes reach the 97..122
+    // range on purpose for decoration tricks.
+    expect(lookupElement("custom_msg0")?.upperCaseOnly).toBeFalsy();
+  });
 });

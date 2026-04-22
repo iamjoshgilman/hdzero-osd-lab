@@ -15,7 +15,7 @@ hdzero-osd-lab is a purely client-side, browser-based studio for designing color
 
 ## 3. High-Level Architecture
 
-Four horizontal layers, each an independent module with a narrow public surface so we can split work across subagents. All logic is TypeScript; the only runtime is a static Vite bundle.
+Four horizontal layers, each an independent module with a narrow public surface. All logic is TypeScript; the only runtime is a static Vite bundle.
 
 ```
 +----------------------------------------------------------+
@@ -245,7 +245,7 @@ The project JSON must stay small and human-readable. User-supplied binaries (TTF
 
 ## 6. Phased Roadmap
 
-Each phase is a git tag. Every phase has: user-visible deliverable, acceptance criteria, rough effort, parallelization split.
+Each phase is a git tag. Every phase has a user-visible deliverable and acceptance criteria.
 
 ---
 
@@ -262,17 +262,6 @@ Each phase is a git tag. Every phase has: user-visible deliverable, acceptance c
 - MCM loader reads `CrazySkull_Cuffed.mcm` without error and renders its full glyph set.
 - Palette mode: a comma-separated hex list scatters random colors per glyph. RNG defaults to unseeded; a "seed" control locks output.
 - Glyph override: drag-and-drop PNG onto any tile replaces it, aspect-ratio-preserving scale, centered on chroma-gray (127,127,127).
-
-**Effort.** ~10–14 engineer-days.
-
-**Parallelization (4 independent tracks).**
-
-1. **Track A — Compositor core + BMP codec** (`src/compositor/`, `src/encoders/bmp.ts`, `src/loaders/bmp.ts`). Pure TS, no UI deps. Has the most tests. [~3–4 days]
-2. **Track B — MCM + TTF + image-to-tile loaders** (`src/loaders/`). Uses `opentype.js` and an offscreen canvas. Delivers pure functions `loadMcm(bytes)` and `loadTtfSubset(...)`. [~3 days]
-3. **Track C — Project state + persistence + undo** (`src/state/`, `public/sample-fonts/`). No UI. IndexedDB wrapper, JSON schema, command pattern for undo. [~2 days]
-4. **Track D — UI shell + font grid + file drop** (`src/ui/shell/`, `src/ui/font-editor/`, Tailwind). Wires A/B/C together. [~3–4 days]
-
-Tracks A/B/C can ship in parallel behind clean interfaces; D integrates them.
 
 ---
 
@@ -294,14 +283,6 @@ Tracks A/B/C can ship in parallel behind clean interfaces; D integrates them.
 - Positions persist in `project.osdLayout` and round-trip through JSON.
 - Rendering uses the compositor's RGB buffer as a sprite atlas (no re-rasterization per frame); panning/zooming hits 60 fps.
 - HDZero-specific elements (if any) distinguished visually.
-
-**Effort.** ~7 engineer-days.
-
-**Parallelization (3 tracks).**
-
-1. **Track E — OSD schema** (`src/osd-schema/`). Static data + TypeScript types. Independently testable. [~1.5 days]
-2. **Track F — OSD canvas renderer** (`src/ui/osd-preview/OsdCanvas.tsx`, `src/compositor/atlas.ts`). Takes the composed font + element list, draws. [~3 days]
-3. **Track G — Element library + inspector UI** (`src/ui/osd-preview/ElementLibrary.tsx`, `ElementInspector.tsx`). [~2–3 days]
 
 ---
 
@@ -325,24 +306,17 @@ Tracks A/B/C can ship in parallel behind clean interfaces; D integrates them.
 - Presets: "WhiteRqbbit mini-logo" (`[\]^_`) ships as a demo, proving the pipeline.
 - Project JSON stores the decoration alongside font and OSD layout so a single shared file captures the full build.
 
-**Effort.** ~5–7 engineer-days.
-
-**Parallelization (2 tracks).**
-
-1. **Track H — Craft Name / Stats data model + payload resolver** (`src/decoration/`, `src/osd-schema/craft-name.ts`). Pure functions. [~2 days]
-2. **Track I — Decoration UI** (`src/ui/decoration/`). [~3–4 days]
-
 ---
 
 ### Phase 2.x — Post-v0.2 follow-ups (v0.2.6+)
 
 User-requested papercut fixes and small wins that don't justify their own phase:
 
-- **How-To tab** — dedicated in-app guide with step-by-step directions for first-time visitors. Sits next to `Resources` in the top bar. Sections: "Your first font" (pick sample → drop icon override → download), "Bring your own TTF" (upload → palette → apply per-glyph tints), "Design an OSD screenshot" (layout → bg image → share). All static content, no state. Replaces the need for a modal tutorial popup — discoverable at any time, not intrusive.
+- ~~**How-To tab** — dedicated in-app guide with step-by-step directions for first-time visitors. Sits next to `Resources` in the top bar. Sections: "Your first font" (pick sample → drop icon override → download), "Bring your own TTF" (upload → palette → apply per-glyph tints), "Design an OSD screenshot" (layout → bg image → share). All static content, no state. Replaces the need for a modal tutorial popup — discoverable at any time, not intrusive.~~ Shipped in v0.2.18.
 - **HDZero library browser** — fetch-and-preview community BTFL fonts inline (github.com/hd-zero/hdzero-osd-font-library) without leaving the app.
 - **Logo / mini-logo uploader** — drag a PNG onto the BTFL logo slot or the 120×36 mini-logo zone; compositor already supports both via `-btfllogo`-equivalent code paths.
 - **MCM layer UI** — plug the existing `parseMcm` loader into a layer form so users can overlay analog OSD fonts the same way they can TTFs.
-- **Project persistence across reloads** — write the `ProjectDoc` + asset manifest to IndexedDB on every mutate (not just assets). Lets the auto-bootstrap sample load only on truly first visit instead of every page load.
+- ~~**Project persistence across reloads** — write the `ProjectDoc` + asset manifest to IndexedDB on every mutate (not just assets). Lets the auto-bootstrap sample load only on truly first visit instead of every page load.~~ Shipped in v0.2.17.
 - **Seed control for palette layers** — UI for `project.meta.rngSeed` so users can lock a pleasing random roll reproducibly, or shuffle until one looks good.
 
 ### Phase 4 — v1.0 "Polish, Sharing, Docs"
@@ -367,13 +341,6 @@ User-requested papercut fixes and small wins that don't justify their own phase:
 - Bundle size: main JS < 350 KB gzipped excluding fonts.
 - Works offline after first load (service worker).
 - Manual e2e checklist executes green.
-
-**Effort.** ~7–10 engineer-days.
-
-**Parallelization (2 tracks).**
-
-1. **Track J — Sharing + persistence + offline** (service worker, zip bundler, URL-fragment encoder). [~3 days]
-2. **Track K — UX polish + docs + a11y + CI/CD** (Playwright e2e, Lighthouse budget checks, `docs/`). [~4 days]
 
 ---
 

@@ -1,6 +1,8 @@
-// Decoration tab — home for all the non-functional personalization. Ships
-// first with logo-slot uploaders (BTFL banner, mini-logo, INAV logo); the
-// full Craft Name decoration generator lands with the v0.3.0 milestone.
+// Decoration tab — home for all the non-functional personalization: BTFL
+// banner and mini-logo uploads. The Craft Name "designer" use case (pick
+// glyphs for the 15-char Craft Name field) is covered by the text input in
+// the OSD Preview tab's element panel; this page just hosts the two logo
+// uploaders that feed it.
 
 import { useComputed } from "@preact/signals";
 import { project, mutate } from "@/state/store";
@@ -97,8 +99,9 @@ export function DecorationPage() {
           <span class="text-osd-magenta">Decoration</span>
         </h1>
         <p class="text-sm text-slate-400 leading-relaxed max-w-2xl">
-          Logo slots and personal-branding extras that aren't bound to a specific OSD element.
-          Currently: three logo slots. Full Craft Name designer lands with v0.3.0.
+          Upload the two logo images your font ships. The mini-logo renders anywhere you
+          type <code class="text-osd-mint">[\]^_</code> — select the Craft Name in the OSD
+          Preview tab and paste it into the text field to see it inline.
         </p>
       </header>
 
@@ -106,18 +109,6 @@ export function DecorationPage() {
         {LOGO_SLOTS.map((spec) => (
           <LogoSlotCard key={spec.slot} spec={spec} />
         ))}
-
-        <section class="border border-dashed border-slate-700 rounded-lg p-6">
-          <h2 class="font-mono text-lg text-osd-amber mb-2">Craft Name Designer</h2>
-          <p class="text-sm text-slate-400 leading-snug max-w-xl">
-            Coming in <span class="text-osd-amber">v0.3.0</span>. A 15-tile-wide visual
-            editor for the Betaflight Craft Name field. Pick glyphs by clicking them in the
-            font atlas, drag them into slots, and get the exact 15-character ASCII payload
-            to paste into Betaflight Configurator's Craft Name box. Turns the <code class="text-osd-mint">[\\]^_</code>
-            {" "}mini-logo trick into a point-and-click flow that scales to any glyph
-            arrangement.
-          </p>
-        </section>
       </div>
     </div>
   );

@@ -48,6 +48,15 @@ export interface OsdElement {
   editableText?: boolean;
   /** Max characters accepted when editableText is true. Matches BF field limits. */
   maxTextLen?: number;
+  /**
+   * When true, typed text is force-uppercased before it's saved. Matches
+   * Betaflight Configurator's behavior for Craft Name and Pilot Name — most
+   * HD OSD fonts have letter shapes only at the uppercase slots (65..90), so
+   * uppercasing lets pilots type mixed case without their callsign turning
+   * into arrows (lowercase ASCII 97..122 lands in the arrow / icon range on
+   * most fonts).
+   */
+  upperCaseOnly?: boolean;
   /** Optional extra note surfaced by the inspector. */
   note?: string;
 }
@@ -121,7 +130,8 @@ export const OSD_ELEMENTS: readonly OsdElement[] = [
     sample: ch("WHITERQBBIT"),
     editableText: true,
     maxTextLen: 15,
-    note: "Freeform 15-char text field. See the Decoration Generator (v0.3) for inline-glyph tricks.",
+    upperCaseOnly: true,
+    note: "Freeform 15-char text field. Betaflight uppercases what you type (lowercase ASCII lands in the arrow/icon range on most fonts). See the Decoration Generator (v0.3) for inline-glyph tricks.",
   },
   {
     id: "pilot_name",
@@ -132,6 +142,7 @@ export const OSD_ELEMENTS: readonly OsdElement[] = [
     sample: ch("ONDRAS"),
     editableText: true,
     maxTextLen: 15,
+    upperCaseOnly: true,
   },
   {
     id: "rtc_datetime",

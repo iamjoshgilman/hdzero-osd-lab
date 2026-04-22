@@ -144,12 +144,28 @@ function SelectedElementPanel() {
             placeholder={element.sample
               .map((c) => (c >= 32 && c <= 126 ? String.fromCharCode(c) : "·"))
               .join("")}
-            onInput={(e: Event) => setElementText(element, (e.target as HTMLInputElement).value)}
+            onInput={(e: Event) => {
+              const target = e.target as HTMLInputElement;
+              let v = target.value;
+              if (element.upperCaseOnly) {
+                const up = v.toUpperCase();
+                if (up !== v) {
+                  // Preserve caret position — reassigning .value collapses it
+                  // to the end, which feels broken mid-word.
+                  const caret = target.selectionStart;
+                  target.value = up;
+                  if (caret !== null) target.setSelectionRange(caret, caret);
+                  v = up;
+                }
+              }
+              setElementText(element, v);
+            }}
             class="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 text-[11px] font-mono"
           />
           <span class="text-slate-600 text-[9px]">
-            Leave empty to show the sample value. Characters render as whatever glyph your
-            font has at that ASCII code.
+            {element.upperCaseOnly
+              ? "Auto-uppercased to match Betaflight. Leave empty to show the sample."
+              : "Leave empty to show the sample value. Characters render as whatever glyph your font has at that ASCII code."}
           </span>
         </label>
       ) : (

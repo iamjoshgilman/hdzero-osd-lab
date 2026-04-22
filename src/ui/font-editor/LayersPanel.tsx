@@ -2,17 +2,19 @@
 // v0.1.0 supports uploading a base BMP and per-glyph PNG overrides.
 
 import { useComputed } from "@preact/signals";
-import { useRef } from "preact/hooks";
+import { useRef, useState } from "preact/hooks";
 import { project, mutate } from "@/state/store";
 import { putAsset } from "@/state/assets";
 import { selectedGlyph } from "@/state/ui-state";
 import { FileDrop } from "@/ui/shared/FileDrop";
 import { Button } from "@/ui/shared/Button";
+import { TtfLayerForm } from "./TtfLayerForm";
 import type { BitmapLayer } from "@/state/project";
 
 export function LayersPanel() {
   const layers = useComputed(() => project.value.font.layers);
   const overrideEntries = useComputed(() => Object.entries(project.value.font.overrides));
+  const [ttfFormOpen, setTtfFormOpen] = useState<boolean>(false);
 
   const addBaseBmp = async (file: File) => {
     const buf = await file.arrayBuffer();
@@ -90,11 +92,25 @@ export function LayersPanel() {
       </section>
 
       <section>
-        <h2 class="text-xs font-mono uppercase tracking-wider text-slate-400 mb-2">
-          Layers ({layers.value.length})
-        </h2>
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-xs font-mono uppercase tracking-wider text-slate-400">
+            Layers ({layers.value.length})
+          </h2>
+          <Button
+            variant="secondary"
+            onClick={() => setTtfFormOpen((x) => !x)}
+            class="!px-2 !py-1 !text-[10px]"
+          >
+            {ttfFormOpen ? "− TTF" : "+ TTF"}
+          </Button>
+        </div>
+        {ttfFormOpen && (
+          <div class="mb-3">
+            <TtfLayerForm onClose={() => setTtfFormOpen(false)} />
+          </div>
+        )}
         {layers.value.length === 0 && (
-          <p class="text-xs text-slate-500">Upload a base font above to get started.</p>
+          <p class="text-xs text-slate-500">Upload a base font above or add a TTF layer to get started.</p>
         )}
         <ul class="flex flex-col gap-2">
           {layers.value.map((layer) => (

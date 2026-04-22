@@ -9,11 +9,14 @@ import { project } from "@/state/store";
 import { getAsset } from "@/state/assets";
 import { decodeBmp } from "@/loaders/bmp";
 import { imageRgbaToTile } from "@/loaders/image-to-tile";
+import { rasterizeTtfSubset } from "@/loaders/ttf";
+import { createRng } from "@/compositor/palette";
+import { GLYPH_SUBSETS } from "@/compositor/constants";
 import {
   emptyResolvedAssets,
   type ResolvedAssets,
 } from "@/compositor/compose";
-import type { ProjectDoc } from "@/state/project";
+import type { ProjectDoc, TtfLayer } from "@/state/project";
 
 export interface ResolvedAssetsState {
   assets: Signal<ResolvedAssets>;
@@ -45,6 +48,7 @@ export function useResolvedAssets(): ResolvedAssetsState {
       try {
         const next = emptyResolvedAssets();
         await loadBitmapLayers(doc, next);
+        await loadTtfLayers(doc, next);
         await loadOverrideTiles(doc, next);
         if (!cancelled) {
           state.assets.value = next;
@@ -107,6 +111,48 @@ async function loadBitmapLayers(doc: ProjectDoc, out: ResolvedAssets): Promise<v
     const rgb = decodeBmp(rec.bytes);
     out.bitmap.set(hash, rgb);
   }
+}
+
+/**
+ * Rasterize every enabled TTF layer. Each layer produces its own TileMap
+ * keyed by layer.id (not asset hash) since two layers can share a TTF but
+ * render with different sizes / colors / subsets.
+ */
+async function loadTtfLayers(doc: ProjectDoc, out: ResolvedAssets): Promise<void> {
+  for (const layer of doc.font.layers) {
+    if (layer.kind !== "ttf") continue;
+    if (!layer.enabled) continue;
+    if (layer.source.kind !== "user") continue;
+    const rec = await getAsset(layer.source.hash);
+    if (!rec) continue;
+    try {
+      const tiles = await rasterizeOneTtfLayer(layer, rec.bytes);
+      out.ttf.set(layer.id, tiles);
+    } catch (err) {
+      // Surface the error but keep loading other layers.
+      console.error(`TTF layer "${layer.id}" failed to rasterize:`, err);
+    }
+  }
+}
+
+async function rasterizeOneTtfLayer(
+  layer: TtfLayer,
+  bytes: ArrayBuffer,
+): Promise<import("@/compositor/types").TileMap> {
+  const codes = GLYPH_SUBSETS[layer.subset];
+  const seed = project.value.meta.rngSeed;
+  return rasterizeTtfSubset(bytes, {
+    codes,
+    size: layer.size,
+    outlineThickness: layer.outlineThickness,
+    vStretch: layer.vStretch,
+    glyphOffset: layer.glyphOffset,
+    outlineOffset: layer.outlineOffset,
+    glyphColor: layer.glyphColor,
+    outlineColor: layer.outlineColor,
+    superSampling: layer.superSampling,
+    rng: createRng(seed),
+  });
 }
 
 async function loadOverrideTiles(doc: ProjectDoc, out: ResolvedAssets): Promise<void> {

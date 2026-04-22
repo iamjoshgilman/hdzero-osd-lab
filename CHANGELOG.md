@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-04-22
+
+### Added — TTF palette layer support (the headline WhiteRqbbit feature)
+
+- **"+ TTF" button** in the LayersPanel. Clicking it opens an inline form for adding a TrueType/OpenType layer to the current project.
+- Form fields mirror the Python fork's CLI args: target subset (Letters / Numbers / Specials / Lowercase-to-upper / All Characters), font size, outline thickness, vertical stretch, glyph color, outline color. Values have sensible defaults (22 px, 1.0 outline, 1.0 stretch, off-white on black).
+- **Comma-separated palette** accepted in the glyph color field: `#00FFAA,#00FFFF,#FF00FF,#FFB000` renders a random color per glyph — the WhiteRqbbit signature scatter look. Single hex still works.
+- **"Use WhiteRqbbit palette"** one-click link pre-fills the four-color palette.
+- `useResolvedAssets` now loads TTF layers: fetches the TTF bytes from IndexedDB, calls `rasterizeTtfSubset` with the layer's config, caches the resulting `TileMap` in `assets.ttf` keyed by layer id (so the same TTF can be used at multiple sizes/colors across different layers). Failures log to console but don't break the other layers.
+
+### Notes
+
+- TTF rasterization runs in the browser via `FontFace` + `OffscreenCanvas`. First render per layer is ~300-800 ms depending on subset size + supersampling (default 8×); subsequent renders are fast.
+- `project.meta.rngSeed` is null by default, so palette layers shuffle fresh every time `useResolvedAssets` re-runs. If you want a deterministic palette roll, a seed UI will land in a future patch.
+- Tests unchanged at 126 — TTF rasterization has structural tests only (full pixel-level would need a headless browser harness).
+
+### Bumped
+
+- `package.json` version `0.2.1` → `0.2.2`.
+
 ## [0.2.1] - 2026-04-22
 
 ### Added — Resources tab

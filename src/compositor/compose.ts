@@ -21,8 +21,8 @@ import {
   codeToOrigin,
 } from "./constants";
 import type { RgbImage, RgbaImage, Tile, TileMap } from "./types";
-import { createAtlas, blitTile, blitRgbaRegionIntoAtlas, extractTile } from "./atlas";
-import { createRng } from "./palette";
+import { createAtlas, blitTile, blitRgbaRegionIntoAtlas, extractTile, tintTileInPlace } from "./atlas";
+import { createRng, parseHex } from "./palette";
 
 /**
  * Pre-loaded assets keyed by the thing that needs them.
@@ -90,6 +90,14 @@ export function compose(
     const code = Number(codeStr);
     const tile = assets.overrides.get(code);
     if (tile) blitTile(atlas, tile, code);
+  }
+
+  // Per-tile color tints: final post-composite pass. Multiplicative so
+  // outlines stay dark and fills take the target hue. `?? {}` guards old
+  // project JSONs that predate v0.2.5.
+  for (const [codeStr, tintHex] of Object.entries(project.font.tints ?? {})) {
+    const code = Number(codeStr);
+    tintTileInPlace(atlas, code, parseHex(tintHex));
   }
 
   return atlas;

@@ -37,6 +37,41 @@ export function createTile(fill: Rgb = [127, 127, 127]): Tile {
 }
 
 /**
+ * Multiplicative tint applied in place to an atlas tile.
+ * Chroma-gray (transparency) pixels are left alone so OSD compositing still
+ * sees-through correctly. Every other pixel gets each channel multiplied by
+ * the target color / 255 — so white glyph fill → target color, black
+ * outline stays black, mid-gray becomes a darker variant of the target.
+ */
+export function tintTileInPlace(
+  atlas: Uint8ClampedArray,
+  code: number,
+  tint: Rgb,
+): void {
+  if (code < 0 || code >= FONT_GRID.cols * FONT_GRID.rows) return;
+  const { x, y } = codeToOrigin(code);
+  const stride = FONT_SIZE.w * 3;
+  const [tr, tg, tb] = tint;
+  for (let row = 0; row < GLYPH_SIZE.h; row++) {
+    let off = (y + row) * stride + x * 3;
+    for (let col = 0; col < GLYPH_SIZE.w; col++) {
+      const r = atlas[off]!;
+      const g = atlas[off + 1]!;
+      const b = atlas[off + 2]!;
+      // Skip the chroma-key pixels — those map to transparent on the goggle.
+      if (!(r === 127 && g === 127 && b === 127)) {
+        // Integer round-divide by 255 via the classic (x * 257 + 0x8080) >>> 16
+        // trick — so 255 × 255 = 255, not the off-by-one 254 you'd get from >>> 8.
+        atlas[off] = (r * tr * 257 + 0x8080) >>> 16;
+        atlas[off + 1] = (g * tg * 257 + 0x8080) >>> 16;
+        atlas[off + 2] = (b * tb * 257 + 0x8080) >>> 16;
+      }
+      off += 3;
+    }
+  }
+}
+
+/**
  * Blit a 24×36 tile into the atlas at the given glyph code.
  * Out-of-range codes are silently ignored (compose uses this for -32
  * lowercase offsets where lowletters past 'z' would underflow past code 65).

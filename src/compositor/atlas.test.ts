@@ -6,6 +6,7 @@ import {
   blitTile,
   extractTile,
   blitRgbaRegionIntoAtlas,
+  tintTileInPlace,
   TILE_BYTES,
   ATLAS_BYTES,
 } from "./atlas";
@@ -79,6 +80,61 @@ describe("blitTile", () => {
     blitTile(atlas, src, 42);
     const got = extractTile(atlas, 42);
     expect(got).toEqual(src);
+  });
+});
+
+describe("tintTileInPlace", () => {
+  it("multiplies a white tile by red → red tile", () => {
+    const atlas = createAtlas([0, 0, 0]);
+    const white = createTile([255, 255, 255]);
+    blitTile(atlas, white, 0);
+    tintTileInPlace(atlas, 0, [255, 0, 0]);
+    const out = extractTile(atlas, 0);
+    expect([out[0], out[1], out[2]]).toEqual([255, 0, 0]);
+  });
+
+  it("leaves chroma-gray pixels alone so transparency survives", () => {
+    const atlas = createAtlas([127, 127, 127]);
+    const tile = createTile([127, 127, 127]);
+    // One non-chroma pixel in the corner.
+    tile[0] = 255;
+    tile[1] = 255;
+    tile[2] = 255;
+    blitTile(atlas, tile, 0);
+    tintTileInPlace(atlas, 0, [0, 255, 0]);
+    const out = extractTile(atlas, 0);
+    expect([out[0], out[1], out[2]]).toEqual([0, 255, 0]);
+    // chroma-gray at a non-corner position: untouched
+    expect([out[3], out[4], out[5]]).toEqual([127, 127, 127]);
+  });
+
+  it("multiplies preserves outline darkness — black stays black under any tint", () => {
+    const atlas = createAtlas([0, 0, 0]);
+    const out = extractTile(atlas, 5);
+    expect([out[0], out[1], out[2]]).toEqual([0, 0, 0]);
+    tintTileInPlace(atlas, 5, [255, 0, 0]);
+    const after = extractTile(atlas, 5);
+    expect([after[0], after[1], after[2]]).toEqual([0, 0, 0]);
+  });
+
+  it("mid-gray fill becomes a darker variant of the target", () => {
+    const atlas = createAtlas([0, 0, 0]);
+    const tile = createTile([128, 128, 128]);
+    blitTile(atlas, tile, 10);
+    tintTileInPlace(atlas, 10, [255, 0, 0]);
+    const out = extractTile(atlas, 10);
+    // 128 * 255 / 256 = 127.5 ≈ 127 (shifted down 1 due to >>>8 vs /255)
+    expect(out[0]).toBeGreaterThanOrEqual(126);
+    expect(out[0]).toBeLessThanOrEqual(128);
+    expect(out[1]).toBe(0);
+    expect(out[2]).toBe(0);
+  });
+
+  it("out-of-range codes are ignored", () => {
+    const atlas = createAtlas([200, 200, 200]);
+    tintTileInPlace(atlas, -1, [255, 0, 0]);
+    tintTileInPlace(atlas, 9999, [255, 0, 0]);
+    expect(atlas[0]).toBe(200);
   });
 });
 

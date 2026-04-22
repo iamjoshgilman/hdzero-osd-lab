@@ -26,6 +26,13 @@ export interface ProjectDoc {
     layers: Layer[];
     /** Per-tile image override. Always wins after the layer stack resolves. Key = 0..511. */
     overrides: Record<number, OverrideSource>;
+    /**
+     * Per-tile color tint applied as a final post-composite pass. Each non-
+     * chroma-gray pixel of the tile is multiplied by the target color, so
+     * outlines stay dark and fills take the hue. Key = 0..511 glyph code.
+     * Optional so projects created before v0.2.5 round-trip cleanly.
+     */
+    tints?: Record<number, HexColor>;
   };
   osdLayout: {
     /** Betaflight OSD element layout — user's in-flight positions, not the font. */
@@ -144,6 +151,7 @@ export function createDefaultProject(): ProjectDoc {
     font: {
       layers: [],
       overrides: {},
+      tints: {},
     },
     osdLayout: {
       elements: {},

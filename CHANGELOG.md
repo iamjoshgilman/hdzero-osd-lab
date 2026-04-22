@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-04-22
+
+### Added — Per-glyph color tints
+
+- Click any glyph on the Font tab → the **Glyph Inspector** panel now has a **Color tint** section with a native color picker + hex input + clear button. Pick a color; the selected glyph's non-transparent pixels get multiplied by it in the final composed atlas. Works regardless of what drew the tile — base bitmap, TTF layer, image override — tints always run last.
+- Multiplicative blend model: `(r,g,b) × (tr,tg,tb) / 255` per channel. Outlines stay dark, fills take the hue, mid-gray becomes a darker variant of the target. Feels like actual tint not a flat repaint.
+- `ProjectDoc.font.tints?: Record<number, HexColor>` — optional so v0.2.4-and-earlier projects load cleanly.
+- `tintTileInPlace()` helper in `src/compositor/atlas.ts` with proper 255-aware rounded divide (classic `(x * 257 + 0x8080) >>> 16` trick) so 255 × 255 = 255 exactly.
+
+### Added — Tests
+
+- 5 new test cases for `tintTileInPlace`: white × red = red, chroma-gray passthrough, black outlines stay black under any tint, mid-gray becomes darker variant, out-of-range codes are ignored. Total: 126 → 131.
+
+### Bumped
+
+- `package.json` version `0.2.4` → `0.2.5`.
+
 ## [0.2.4] - 2026-04-22
 
 ### Added — Edit existing TTF layers

@@ -8,13 +8,14 @@
 
 import { useComputed } from "@preact/signals";
 import { useEffect, useRef } from "preact/hooks";
-import { project } from "@/state/store";
+import { project, mutate } from "@/state/store";
 import { selectedGlyph } from "@/state/ui-state";
 import { compose } from "@/compositor/compose";
 import { extractTile } from "@/compositor/atlas";
 import { GLYPH_SIZE } from "@/compositor/constants";
 import { useResolvedAssets } from "@/ui/hooks/useResolvedAssets";
 import { lookupSymbol } from "@/osd-schema";
+import type { HexColor } from "@/state/project";
 import {
   getGlyphMetadata,
   CATEGORY_COLORS,
@@ -105,8 +106,73 @@ function GlyphDetails({ code, atlas }: { code: number; atlas: Uint8ClampedArray 
         )}
       </section>
 
+      <TintEditor code={code} />
+
       <SafetyNote meta={meta} />
     </div>
+  );
+}
+
+function setTint(code: number, color: HexColor): void {
+  mutate((doc) => {
+    doc.font.tints = { ...(doc.font.tints ?? {}), [code]: color };
+  });
+}
+
+function clearTint(code: number): void {
+  mutate((doc) => {
+    if (!doc.font.tints) return;
+    const next = { ...doc.font.tints };
+    delete next[code];
+    doc.font.tints = next;
+  });
+}
+
+function TintEditor({ code }: { code: number }) {
+  const tint = useComputed(() => project.value.font.tints?.[code] ?? null);
+  const current = tint.value ?? "#ffffff";
+  return (
+    <section>
+      <h3 class="text-slate-500 uppercase tracking-wider text-[10px] mb-1">Color tint</h3>
+      <div class="flex items-center gap-2">
+        <input
+          type="color"
+          value={current}
+          onInput={(e: Event) => {
+            const v = (e.target as HTMLInputElement).value as HexColor;
+            setTint(code, v);
+          }}
+          class="w-10 h-8 bg-slate-900 border border-slate-700 rounded cursor-pointer"
+        />
+        <input
+          type="text"
+          value={tint.value ?? ""}
+          placeholder="#rrggbb"
+          onInput={(e: Event) => {
+            const raw = (e.target as HTMLInputElement).value.trim();
+            if (raw === "") {
+              clearTint(code);
+              return;
+            }
+            if (/^#[0-9a-f]{6}$/i.test(raw)) setTint(code, raw as HexColor);
+          }}
+          class="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-slate-100 text-[11px] font-mono"
+        />
+        {tint.value && (
+          <button
+            onClick={() => clearTint(code)}
+            class="text-slate-500 hover:text-osd-alert text-[10px] px-1"
+            title="Clear tint"
+          >
+            ×
+          </button>
+        )}
+      </div>
+      <p class="text-[10px] text-slate-500 mt-1 leading-snug">
+        Multiplies every non-transparent pixel of this glyph. Outlines stay dark; fills take the
+        hue. Applied after every layer.
+      </p>
+    </section>
   );
 }
 

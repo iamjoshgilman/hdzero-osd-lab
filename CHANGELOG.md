@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-04-21
+
+### Added — Sample base fonts
+
+- `public/sample-fonts/ondrascz-grey.bmp` and `public/sample-fonts/ondrascz-color.bmp` — two MIT-licensed starter fonts by ondrascz (both 384×1152 24-bit BMP, 1,327,158 bytes, SD-card-ready format). Bundled so first-time visitors have something to see without having to hunt down a BMP.
+- `LayersPanel` base-font section now includes "Grey starter" and "Color starter" buttons next to the drop zone. Click either → fetches `/sample-fonts/<name>.bmp`, puts it in IndexedDB via the same hash-based path user uploads take, adds it as an `ALL`-subset bitmap layer. Attribution link to ondrascz's repo shown underneath.
+- `NOTICE` updated with an explicit sample-fonts attribution block.
+
+### Notes
+
+- HDZero library browser (fetch directly from `github.com/hd-zero/hdzero-osd-font-library`) deferred to a future release — needs a mini gallery UI and CORS-safe GitHub API fetch plumbing.
+
 ## [0.1.4] - 2026-04-21
 
 ### Added — Betaflight symbol schema

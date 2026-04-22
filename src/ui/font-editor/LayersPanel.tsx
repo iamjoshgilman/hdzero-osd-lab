@@ -29,6 +29,25 @@ export function LayersPanel() {
     });
   };
 
+  const loadSample = async (filename: string, displayName: string) => {
+    const res = await fetch(`${import.meta.env.BASE_URL}sample-fonts/${filename}`);
+    if (!res.ok) {
+      alert(`Could not load sample font ${filename} (HTTP ${res.status})`);
+      return;
+    }
+    const buf = await res.arrayBuffer();
+    const hash = await putAsset(buf, { name: displayName, mime: "image/bmp" });
+    mutate((doc) => {
+      doc.font.layers.push({
+        id: `base-${Date.now()}`,
+        kind: "bitmap",
+        source: { kind: "user", hash, name: displayName, mime: "image/bmp" },
+        subset: "ALL",
+        enabled: true,
+      });
+    });
+  };
+
   const toggleLayer = (id: string) => {
     mutate((doc) => {
       const l = doc.font.layers.find((x) => x.id === id);
@@ -67,6 +86,33 @@ export function LayersPanel() {
           label="Drop a 384×1152 BMP"
           onFile={addBaseBmp}
         />
+        <div class="mt-2 flex flex-col gap-1">
+          <p class="text-[10px] font-mono text-slate-500">or start with a sample:</p>
+          <div class="flex gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => loadSample("ondrascz-grey.bmp", "ondrascz grey (sample)")}
+              class="flex-1 !px-2 !py-1 !text-[10px]"
+            >
+              Grey starter
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => loadSample("ondrascz-color.bmp", "ondrascz color (sample)")}
+              class="flex-1 !px-2 !py-1 !text-[10px]"
+            >
+              Color starter
+            </Button>
+          </div>
+          <p class="text-[9px] text-slate-600 leading-tight">
+            by <a
+              href="https://github.com/ondrascz/HD-OSD-Font-Tools"
+              target="_blank"
+              rel="noreferrer"
+              class="underline hover:text-slate-400"
+            >ondrascz</a>, MIT licensed.
+          </p>
+        </div>
       </section>
 
       <section>

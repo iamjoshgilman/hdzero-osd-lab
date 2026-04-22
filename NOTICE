@@ -14,6 +14,13 @@ data and documented behavior.
    by a WhiteRqbbit fork that added palette TTF rendering and per-glyph
    image overrides.
 
+   The sample base fonts bundled in `public/sample-fonts/` are also
+   originally by ondrascz:
+   - `ondrascz-grey.bmp` — derived from `resources/fonts/BTFL_ondrascz_grey.png`
+   - `ondrascz-color.bmp` — derived from `resources/fonts/BTFL_ondrascz_color.bmp`
+   Both converted to 24-bit BMP v3 for direct `BTFL_000.bmp` compatibility.
+   Redistributed here under the upstream MIT terms.
+
 2. Betaflight Configurator (JavaScript, GPL-3.0)
    https://github.com/betaflight/betaflight-configurator
    Betaflight's OSD tab defines the element table and default layout

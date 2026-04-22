@@ -37,6 +37,9 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Local scratch
+# Local scratch (ad-hoc research dumps, vendored upstream source for reference)
 /scratch/
 /tmp/
+
+# Sample fonts staged for future commit via a sample picker — drop here as we go
+# so public/ doesn't change shape until v0.1.5 ships.

@@ -14,6 +14,7 @@ import { compose } from "@/compositor/compose";
 import { extractTile } from "@/compositor/atlas";
 import { GLYPH_SIZE } from "@/compositor/constants";
 import { useResolvedAssets } from "@/ui/hooks/useResolvedAssets";
+import { lookupSymbol } from "@/osd-schema";
 import {
   getGlyphMetadata,
   CATEGORY_COLORS,
@@ -53,6 +54,7 @@ function EmptyState() {
 function GlyphDetails({ code, atlas }: { code: number; atlas: Uint8ClampedArray }) {
   const meta = getGlyphMetadata(code);
   const color = CATEGORY_COLORS[meta.category];
+  const symbol = lookupSymbol(code);
 
   return (
     <div class="flex flex-col gap-4">
@@ -60,13 +62,30 @@ function GlyphDetails({ code, atlas }: { code: number; atlas: Uint8ClampedArray 
         <div class="text-2xl font-bold" style={{ color }}>
           #{code}
         </div>
-        <div class="text-slate-400">{CATEGORY_LABELS[meta.category]}</div>
+        <div class="text-slate-400">
+          {symbol ? symbol.label : CATEGORY_LABELS[meta.category]}
+        </div>
       </div>
 
       <div class="flex gap-3 items-start">
         <TilePreview atlas={atlas} code={code} />
         {meta.asciiChar !== null && <AsciiPreview char={meta.asciiChar} />}
       </div>
+
+      {symbol && (
+        <section>
+          <h3 class="text-slate-500 uppercase tracking-wider text-[10px] mb-1">
+            Betaflight role
+          </h3>
+          <p class="text-slate-300">
+            <span class="text-osd-cyan">SYM_{symbol.name}</span>
+          </p>
+          <p class="text-[10px] text-slate-500 mt-0.5">
+            Category: {symbol.category}
+            {symbol.note ? ` · ${symbol.note}` : ""}
+          </p>
+        </section>
+      )}
 
       <section>
         <h3 class="text-slate-500 uppercase tracking-wider text-[10px] mb-1">Subsets</h3>

@@ -1,4 +1,4 @@
-// Phase 2 (see PLAN.md §6). Static data table of Betaflight OSD elements
-// (name, glyph codes, default position, width). Reimplemented from public
-// documentation; no Betaflight GPL code is copied.
-export {};
+// Phase 2 (see PLAN.md §6). Static data tables of Betaflight OSD symbols and
+// elements. Reimplemented as data from publicly documented constants — no
+// Betaflight GPL code is copied.
+export * from "./symbols";

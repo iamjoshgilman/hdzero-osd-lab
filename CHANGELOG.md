@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-04-21
+
+### Added — Betaflight symbol schema
+
+- `src/osd-schema/symbols.ts` — 99-entry table mapping every SYM_* constant from Betaflight's `src/main/drivers/osd_symbols.h` (GPL-3.0, data reimplemented in TS, no code copied) to a human label and semantic category (rssi, throttle, unit, heading, ahi, sats, arrow, battery, power, time, speed, stick, progress, lap, gps, misc). Exports `lookupSymbol(code)`, `allSymbols()`, `symbolCount()`. Aliases (`SYM_CURSOR` → `SYM_AH_LEFT`, `SYM_GPS_DEGREE` → `SYM_STICK_OVERLAY_SPRITE_HIGH`) are captured as notes on the primary entry rather than duplicate rows.
+- `src/osd-schema/symbols.test.ts` — 5 cases covering count stability, range invariants, unique-code guarantee (catches accidental duplicates when adding new symbols), well-known lookups, and category coverage. 111 → 117 tests.
+
+### Changed — InspectorPanel
+
+- `src/ui/font-editor/InspectorPanel.tsx` — when the selected glyph is a known BF symbol, the panel now shows its role above the subset chips: e.g. selecting code 123 now displays **"Link Quality (LQ) · SYM_LINK_QUALITY"** instead of just "BTFL_VALUES". Silently hides the section for ASCII letters/numbers/logo tiles / unused codes that don't have a semantic mapping.
+
+### Notes
+
+- Full OSD element table (RSSI Value, Craft Name, Battery Voltage, etc. with default positions + widths) is a larger Phase 2 artifact and is deferred. v0.1.4 ships the code-level semantic layer only — enough to meaningfully annotate the font grid.
+- `scratch/` pattern in `.gitignore` keeps local copies of the upstream BF GPL source out of this MIT repo.
+
 ## [0.1.3] - 2026-04-21
 
 ### Added

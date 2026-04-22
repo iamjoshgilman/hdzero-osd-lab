@@ -35,6 +35,12 @@ export interface OsdElement {
   /** Sample glyph sequence blitted at render time. Each entry is a 0..255 code. */
   sample: readonly number[];
   /**
+   * Number of tile rows this element occupies. Defaults to 1. For multi-row
+   * elements (banner logo, artificial horizon) the `sample` is a row-major
+   * flat array with `sample.length === width × spanRows`.
+   */
+  spanRows?: number;
+  /**
    * If true, the user can override the `sample` with their own text via an
    * input field in the UI. Good for craft name, pilot name, custom messages —
    * places where Betaflight treats the element contents as freeform text.
@@ -439,6 +445,22 @@ export const OSD_ELEMENTS: readonly OsdElement[] = [
     defaultPos: { x: 2, y: 15 },
     defaultEnabled: false,
     sample: [SYM_BBLOG, ...ch(" 512M")],
+  },
+
+  // ---- Betaflight Logo banner ----
+  // The 24×4-tile BTFL banner composed from glyph codes 160..255. Betaflight's
+  // OSD_LOGO element draws these tiles at a user-positioned spot, typically
+  // top-center while disarmed. Uses spanRows=4 so the OsdCanvas renderer
+  // wraps the sample into 4 rows of 24 tiles each.
+  {
+    id: "logo",
+    label: "Betaflight Logo (24×4 banner)",
+    category: "decorative",
+    defaultPos: { x: 14, y: 2 },
+    defaultEnabled: false,
+    spanRows: 4,
+    sample: Array.from({ length: 96 }, (_, i) => 160 + i),
+    note: "Whatever's at glyph codes 160..255 renders as a 24×4 banner. Upload a custom logo in the Decoration tab to replace it.",
   },
 
   // ---- AHI (artificial horizon) ----

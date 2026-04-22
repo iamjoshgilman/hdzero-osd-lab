@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.13] - 2026-04-22
+
+### Added — Banner element in OSD preview + realism toggle
+
+- **BTFL Logo element** (`id: "logo"`, category `decorative`) now available in the OSD element library. Enabling it renders the 24×4 banner from glyph codes 160..255 at its positioned spot on the 53×20 grid. Drag it anywhere, toggle it on/off like any other element. Uploads from the Decoration tab now immediately preview in context.
+- **OsdElement.spanRows** optional schema field: elements can declare they occupy multiple tile rows. `sample` stays a flat row-major array (`sample.length === width × spanRows`). The OsdCanvas renderer, drag clamper, hit-tester, and selection-highlight all account for the 2D footprint. Used by the logo element (`spanRows: 4`) and available for any future wide element (e.g. the proper 9×5 artificial horizon down the road).
+- **Realism toggle** in the OSD toolbar — a subtle 2px-scanline + deterministic static-noise overlay that approximates FPV goggle video. Off by default. Applied after elements / background but before the selection highlight so the mint outline still reads crisply.
+
+### Added — Tests
+
+- New invariant: every multi-row element's `sample.length` must be divisible by its `spanRows`. 134 → 135.
+
+### Bumped
+
+- `package.json` version `0.2.12` → `0.2.13`.
+
 ## [0.2.12] - 2026-04-22
 
 ### Fixed

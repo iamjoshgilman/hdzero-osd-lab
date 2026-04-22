@@ -85,6 +85,7 @@ export function OsdCanvas() {
   const [bg, setBg] = useState<BgKey>("chroma");
   const [fitWidth, setFitWidth] = useState<boolean>(true);
   const [bgDim, setBgDim] = useState<number>(0); // 0..1 darkening overlay over bg image
+  const [realism, setRealism] = useState<boolean>(false);
   const [shareMsg, setShareMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -165,16 +166,57 @@ export function OsdCanvas() {
       const livePos =
         drag && drag.elementId === element.id ? { x: drag.col, y: drag.row } : base;
       const sample = effectiveSample(element, project.value);
-      for (let i = 0; i < sample.length; i++) {
-        const code = sample[i]!;
-        const col = livePos.x + i;
-        if (col >= OSD_GRID.cols || col < 0) break;
-        const { x: sx, y: sy } = codeToOrigin(code);
-        const dx = col * GLYPH_SIZE.w;
-        const dy = livePos.y * GLYPH_SIZE.h;
-        if (dy < 0 || dy + GLYPH_SIZE.h > OSD_H_PX) continue;
-        ctx.drawImage(off, sx, sy, GLYPH_SIZE.w, GLYPH_SIZE.h, dx, dy, GLYPH_SIZE.w, GLYPH_SIZE.h);
+      const rows = element.spanRows ?? 1;
+      const cols = Math.floor(sample.length / rows);
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const code = sample[r * cols + c]!;
+          const col = livePos.x + c;
+          const row = livePos.y + r;
+          if (col >= OSD_GRID.cols || col < 0) continue;
+          if (row >= OSD_GRID.rows || row < 0) continue;
+          const { x: sx, y: sy } = codeToOrigin(code);
+          const dx = col * GLYPH_SIZE.w;
+          const dy = row * GLYPH_SIZE.h;
+          ctx.drawImage(off, sx, sy, GLYPH_SIZE.w, GLYPH_SIZE.h, dx, dy, GLYPH_SIZE.w, GLYPH_SIZE.h);
+        }
       }
+    }
+
+    // Realism overlay: horizontal scanlines + a touch of noise. Applied on
+    // top of everything (bg + elements) but UNDER the selection highlight so
+    // the mint outline still reads crisply. Kept subtle; real goggle video
+    // isn't a CRT, but a hint of scanline texture stops the preview from
+    // looking like a flat digital mockup.
+    if (realism) {
+      // Alternating 2-px scanlines at ~10% darkening.
+      ctx.save();
+      ctx.globalAlpha = 0.1;
+      ctx.fillStyle = "#000";
+      for (let y = 0; y < OSD_H_PX; y += 4) {
+        ctx.fillRect(0, y, OSD_W_PX, 2);
+      }
+      ctx.restore();
+      // Sparse, deterministic noise sprinkle (same seed each draw so it
+      // doesn't shimmer; just breaks up the pristine-canvas feel).
+      ctx.save();
+      ctx.globalAlpha = 0.06;
+      ctx.fillStyle = "#fff";
+      let s = 0x9e3779b1;
+      for (let i = 0; i < 900; i++) {
+        s ^= s << 13;
+        s ^= s >>> 17;
+        s ^= s << 5;
+        const r = (s >>> 0) / 0x1_0000_0000;
+        const nx = Math.floor(r * OSD_W_PX);
+        s ^= s << 13;
+        s ^= s >>> 17;
+        s ^= s << 5;
+        const r2 = (s >>> 0) / 0x1_0000_0000;
+        const ny = Math.floor(r2 * OSD_H_PX);
+        ctx.fillRect(nx, ny, 1, 1);
+      }
+      ctx.restore();
     }
 
     // Selection highlight — neon-mint box around the selected element.
@@ -186,6 +228,8 @@ export function OsdCanvas() {
           drag && drag.elementId === el.id ? { x: drag.col, y: drag.row } : base;
         if (base.enabled) {
           const sample = effectiveSample(el, project.value);
+          const rows = el.spanRows ?? 1;
+          const cols = Math.floor(sample.length / rows);
           ctx.strokeStyle = "#00ffaa";
           ctx.lineWidth = 2;
           ctx.shadowColor = "#00ffaa";
@@ -193,14 +237,14 @@ export function OsdCanvas() {
           ctx.strokeRect(
             livePos.x * GLYPH_SIZE.w - 1,
             livePos.y * GLYPH_SIZE.h - 1,
-            sample.length * GLYPH_SIZE.w + 2,
-            GLYPH_SIZE.h + 2,
+            cols * GLYPH_SIZE.w + 2,
+            rows * GLYPH_SIZE.h + 2,
           );
           ctx.shadowBlur = 0;
         }
       }
     }
-  }, [atlas.value, bg, drag, selected.value, bgImage.value, bgDim]);
+  }, [atlas.value, bg, drag, selected.value, bgImage.value, bgDim, realism]);
 
   /** Map a pointer event to grid (col, row). */
   const pointerToCell = (e: PointerEvent): { col: number; row: number } | null => {
@@ -222,8 +266,17 @@ export function OsdCanvas() {
       const el = OSD_ELEMENTS[i]!;
       const pos = effectivePosition(el, project.value);
       if (!pos.enabled) continue;
-      const width = effectiveSample(el, project.value).length;
-      if (row === pos.y && col >= pos.x && col < pos.x + width) return el;
+      const sample = effectiveSample(el, project.value);
+      const rows = el.spanRows ?? 1;
+      const cols = Math.floor(sample.length / rows);
+      if (
+        col >= pos.x &&
+        col < pos.x + cols &&
+        row >= pos.y &&
+        row < pos.y + rows
+      ) {
+        return el;
+      }
     }
     return null;
   };
@@ -264,9 +317,11 @@ export function OsdCanvas() {
       (dragStateRef.current as DragState & { _offRow?: number })._offRow ?? 0;
     const el = OSD_ELEMENTS.find((x) => x.id === dragStateRef.current!.elementId);
     if (!el) return;
-    const width = effectiveSample(el, project.value).length;
+    const sample = effectiveSample(el, project.value);
+    const rows = el.spanRows ?? 1;
+    const width = Math.floor(sample.length / rows);
     const newCol = Math.max(0, Math.min(OSD_GRID.cols - width, cell.col - offCol));
-    const newRow = Math.max(0, Math.min(OSD_GRID.rows - 1, cell.row - offRow));
+    const newRow = Math.max(0, Math.min(OSD_GRID.rows - rows, cell.row - offRow));
     const next: DragState = { elementId: dragStateRef.current.elementId, col: newCol, row: newRow };
     // Preserve the offsets across renders.
     (next as DragState & { _offCol?: number; _offRow?: number })._offCol = offCol;
@@ -379,6 +434,17 @@ export function OsdCanvas() {
             onInput={(e: Event) => setFitWidth((e.target as HTMLInputElement).checked)}
           />
           <span>Fit width</span>
+        </label>
+        <label
+          class="flex items-center gap-2 cursor-pointer"
+          title="Subtle scanline + grain overlay to approximate FPV video look"
+        >
+          <input
+            type="checkbox"
+            checked={realism}
+            onInput={(e: Event) => setRealism((e.target as HTMLInputElement).checked)}
+          />
+          <span>Realism</span>
         </label>
         {bgImage.value && (
           <label class="flex items-center gap-2">

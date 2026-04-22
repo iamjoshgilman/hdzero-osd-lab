@@ -50,8 +50,20 @@ describe("OSD element schema", () => {
 
   it("every sample fits horizontally when placed at its default position", () => {
     for (const e of OSD_ELEMENTS) {
-      const endCol = e.defaultPos.x + e.sample.length;
+      const rows = e.spanRows ?? 1;
+      const cols = Math.floor(e.sample.length / rows);
+      const endCol = e.defaultPos.x + cols;
+      const endRow = e.defaultPos.y + rows;
       expect(endCol).toBeLessThanOrEqual(OSD_GRID.cols);
+      expect(endRow).toBeLessThanOrEqual(OSD_GRID.rows);
+    }
+  });
+
+  it("multi-row elements have sample length evenly divisible by spanRows", () => {
+    for (const e of OSD_ELEMENTS) {
+      if (e.spanRows && e.spanRows > 1) {
+        expect(e.sample.length % e.spanRows).toBe(0);
+      }
     }
   });
 

@@ -12,6 +12,7 @@ import { InspectorPanel } from "@/ui/font-editor/InspectorPanel";
 import { TabBar } from "@/ui/shell/TabBar";
 import { OsdCanvas } from "@/ui/osd-preview/OsdCanvas";
 import { ElementLibrary } from "@/ui/osd-preview/ElementLibrary";
+import { ResourcesPage } from "@/ui/resources/ResourcesPage";
 import { DecorationStub } from "@/ui/decoration/DecorationStub";
 
 export function AppShell() {
@@ -37,12 +38,13 @@ export function AppShell() {
       <TopBar onDownload={downloadBmp} canDownload={hasLayers.value} />
       <TabBar />
       <main class="flex flex-1 overflow-hidden">
-        {/* Layers panel is global across tabs — font composition is the foundation. */}
-        <LayersPanel />
+        {/* LayersPanel pinned left on project-editing tabs; hidden on Resources (read-only). */}
+        {view.value !== "resources" && <LayersPanel />}
         <section class="flex-1 overflow-auto p-6 flex justify-center">
           {view.value === "font" && <FontPreview />}
           {view.value === "osd" && <OsdCanvas />}
           {view.value === "decoration" && <DecorationStub />}
+          {view.value === "resources" && <ResourcesPage />}
         </section>
         {view.value === "font" && <InspectorPanel />}
         {view.value === "osd" && <ElementLibrary />}

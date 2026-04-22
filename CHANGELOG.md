@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-04-22
+
+### Added — Resources tab
+
+- New fourth tab **Resources** — curated jump-off point for pilots who want to customize their OSD but don't know where to find assets. Groups links into five sections:
+  - **Community font libraries** (HDZero library, ondrascz's original Python tool, BF Configurator source)
+  - **Icons & sprites** for per-glyph overrides (game-icons.net, SVG Repo, OpenGameArt, Heroicons, Iconify)
+  - **Typefaces** for future TTF palette layers (Google Fonts, JetBrains Mono, DaFont, Font Squirrel)
+  - **Format & firmware reference** (BF osd_symbols.h, osd_elements.c, HDZero docs, MAX7456 datasheet)
+  - **Community** (Intofpv, r/fpv, BF discussions)
+- Each link shows a one-line note + license tag where applicable.
+- `LayersPanel` and the per-tab right sidebars are hidden on the Resources tab for full-width reading.
+- `src/ui/resources/ResourcesPage.tsx` — all static content, no state, zero project dependencies.
+
+### Changed
+
+- Removed the `v0.2` tag badge from the OSD Preview tab in the `TabBar` — Phase 2 shipped, no longer "scheduled".
+
 ## [0.2.0] - 2026-04-22 — Phase 2 "OSD Live Preview" complete
 
 Phase 2 is done. The OSD tab is a fully-interactive real-time simulator of what a Betaflight HD OSD will look like over live video, built on top of the v0.1.x compositor. Key wins:

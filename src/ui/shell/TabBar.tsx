@@ -9,8 +9,9 @@ interface Tab {
 
 const TABS: Tab[] = [
   { id: "font", label: "Font" },
-  { id: "osd", label: "OSD Preview", phaseTag: "v0.2" },
+  { id: "osd", label: "OSD Preview" },
   { id: "decoration", label: "Decoration", phaseTag: "v0.3" },
+  { id: "resources", label: "Resources" },
 ];
 
 export function TabBar() {

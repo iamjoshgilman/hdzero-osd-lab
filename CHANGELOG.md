@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.7] - 2026-04-22
+
+### Added — Exploded-format BMP support
+
+- `normalizeHdOsdFont()` in `src/loaders/bmp.ts` — transparently implodes the 486×1350 exploded layout (16 cols × 32 rows with 6px gaps + 6px outer border — the format community editors often save to for hand-editing) down to the compact 384×1152 layout the compositor expects. Compact inputs pass through unchanged. Other dimensions throw a descriptive error.
+- `useResolvedAssets.loadBitmapLayers` now calls through `normalizeHdOsdFont` for every bitmap layer, so dropping an exploded community font like "HDZero Font Mario.bmp" (486×1350) now just works.
+- Bitmap loader also got the same per-layer error routing TTF had in v0.2.3 — dimension-mismatch errors land in `layerErrors[layer.id]` and show up in the LayersPanel as a red row with the message.
+
+### Added — Tests
+
+- 3 new cases for `normalizeHdOsdFont`: compact passthrough (same reference back), exploded implode with per-tile color verification on sampled positions, dimension rejection. Total: 131 → 134.
+
+### Notes
+
+- Dropped two community fonts (`BTFL_analog_default_v1.0.0.bmp` and `BTFL_slappyfpv_graffiti_v1.0.0.bmp`) in v0.1.7 because they shipped in exploded format and we didn't handle it. Those can now be re-added as bundled samples in a future patch.
+
+### Bumped
+
+- `package.json` version `0.2.6` → `0.2.7`.
+
 ## [0.2.6] - 2026-04-22
 
 ### Changed

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { decodeBmp } from "./bmp";
+import { decodeBmp, normalizeHdOsdFont } from "./bmp";
 import { writeBmp24 } from "@/encoders/bmp";
-import { FONT_SIZE } from "@/compositor/constants";
+import { FONT_SIZE, GLYPH_SIZE, FONT_GRID } from "@/compositor/constants";
 
 describe("decodeBmp", () => {
   it("round-trips a 2×2 via write then read", () => {
@@ -78,6 +78,67 @@ describe("decodeBmp", () => {
     v.setUint16(28, 8, true); // 8-bit palette — not supported
     v.setUint32(30, 0, true);
     expect(() => decodeBmp(buf)).toThrow(/24-bit/);
+  });
+
+  it("normalizeHdOsdFont passes compact 384×1152 through unchanged", () => {
+    const data = new Uint8ClampedArray(FONT_SIZE.w * FONT_SIZE.h * 3);
+    for (let i = 0; i < data.length; i++) data[i] = i & 0xff;
+    const img = { width: FONT_SIZE.w, height: FONT_SIZE.h, data };
+    const normalized = normalizeHdOsdFont(img);
+    expect(normalized).toBe(img);
+  });
+
+  it("normalizeHdOsdFont implodes a 486×1350 exploded bitmap", () => {
+    // Build an exploded canvas where every tile's top-left pixel is a unique
+    // color tagged by (col, row). Gaps filled with 255,255,255 to prove they
+    // get stripped.
+    const EXPLODED_W = 486;
+    const EXPLODED_H = 1350;
+    const data = new Uint8ClampedArray(EXPLODED_W * EXPLODED_H * 3);
+    data.fill(255); // white gap pixels everywhere by default
+    for (let row = 0; row < FONT_GRID.rows; row++) {
+      for (let col = 0; col < FONT_GRID.cols; col++) {
+        const sx = col * (GLYPH_SIZE.w + 6) + 6;
+        const sy = row * (GLYPH_SIZE.h + 6) + 6;
+        // Fill the 24×36 tile with a solid color unique to (col, row).
+        const r = col * 16;
+        const g = row * 8;
+        const b = (col + row) & 0xff;
+        for (let y = 0; y < GLYPH_SIZE.h; y++) {
+          for (let x = 0; x < GLYPH_SIZE.w; x++) {
+            const off = ((sy + y) * EXPLODED_W + (sx + x)) * 3;
+            data[off] = r;
+            data[off + 1] = g;
+            data[off + 2] = b;
+          }
+        }
+      }
+    }
+    const result = normalizeHdOsdFont({ width: EXPLODED_W, height: EXPLODED_H, data });
+    expect(result.width).toBe(FONT_SIZE.w);
+    expect(result.height).toBe(FONT_SIZE.h);
+    // Sample a few tiles and confirm the expected solid color came through
+    // (and the gap pixels got dropped).
+    const stride = FONT_SIZE.w * 3;
+    for (const [col, row] of [
+      [0, 0],
+      [5, 10],
+      [15, 31],
+    ] as const) {
+      const topLeft = row * GLYPH_SIZE.h * stride + col * GLYPH_SIZE.w * 3;
+      expect(result.data[topLeft]).toBe(col * 16);
+      expect(result.data[topLeft + 1]).toBe(row * 8);
+      expect(result.data[topLeft + 2]).toBe((col + row) & 0xff);
+    }
+  });
+
+  it("normalizeHdOsdFont rejects other dimensions", () => {
+    const bad = {
+      width: 500,
+      height: 500,
+      data: new Uint8ClampedArray(500 * 500 * 3),
+    };
+    expect(() => normalizeHdOsdFont(bad)).toThrow(/384×1152|486×1350/);
   });
 
   it("rejects truncated pixel data", () => {

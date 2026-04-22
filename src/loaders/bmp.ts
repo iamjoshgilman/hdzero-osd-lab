@@ -7,6 +7,7 @@
 // regardless of whether the source was bottom-up or top-down on disk.
 
 import type { RgbImage } from "@/compositor/types";
+import { FONT_SIZE, GLYPH_SIZE, FONT_GRID } from "@/compositor/constants";
 
 /** Decode a 24-bit BI_RGB BMP into a top-down RGB image. */
 export function decodeBmp(bytes: ArrayBuffer | Uint8Array): RgbImage {
@@ -65,4 +66,57 @@ export function decodeBmp(bytes: ArrayBuffer | Uint8Array): RgbImage {
   }
 
   return { width, height, data: out };
+}
+
+// ---------------------------------------------------------------------------
+// HD OSD font normalization — exploded → compact
+// ---------------------------------------------------------------------------
+
+/** Exploded HD OSD layout: 16 cols × 32 rows of 24×36 tiles with 6px gaps + 6px outer border. */
+const EXPLODED_GAP = 6;
+const EXPLODED_OUTER = 6;
+const EXPLODED_W = FONT_GRID.cols * GLYPH_SIZE.w + (FONT_GRID.cols + 1) * EXPLODED_GAP; // 486
+const EXPLODED_H = FONT_GRID.rows * GLYPH_SIZE.h + (FONT_GRID.rows + 1) * EXPLODED_GAP; // 1350
+
+/**
+ * Normalize an arbitrary HD OSD font bitmap to the compact 384×1152 layout
+ * the compositor expects. Accepts:
+ *   - 384×1152 compact (passes through unchanged)
+ *   - 486×1350 exploded (strips the 6px gaps + outer border)
+ *
+ * Throws with a helpful message for any other dimensions so the UI can
+ * surface the error rather than silently rendering garbage.
+ */
+export function normalizeHdOsdFont(image: RgbImage): RgbImage {
+  if (image.width === FONT_SIZE.w && image.height === FONT_SIZE.h) {
+    return image;
+  }
+  if (image.width === EXPLODED_W && image.height === EXPLODED_H) {
+    return implodeExploded(image);
+  }
+  throw new Error(
+    `HD OSD font must be ${FONT_SIZE.w}×${FONT_SIZE.h} (compact) or ` +
+      `${EXPLODED_W}×${EXPLODED_H} (exploded). Got ${image.width}×${image.height}.`,
+  );
+}
+
+function implodeExploded(image: RgbImage): RgbImage {
+  const out = new Uint8ClampedArray(FONT_SIZE.w * FONT_SIZE.h * 3);
+  const srcStride = image.width * 3;
+  const dstStride = FONT_SIZE.w * 3;
+  const tileRowBytes = GLYPH_SIZE.w * 3;
+  for (let row = 0; row < FONT_GRID.rows; row++) {
+    for (let col = 0; col < FONT_GRID.cols; col++) {
+      const srcX0 = col * (GLYPH_SIZE.w + EXPLODED_GAP) + EXPLODED_OUTER;
+      const srcY0 = row * (GLYPH_SIZE.h + EXPLODED_GAP) + EXPLODED_OUTER;
+      const dstX0 = col * GLYPH_SIZE.w;
+      const dstY0 = row * GLYPH_SIZE.h;
+      for (let py = 0; py < GLYPH_SIZE.h; py++) {
+        const srcOff = (srcY0 + py) * srcStride + srcX0 * 3;
+        const dstOff = (dstY0 + py) * dstStride + dstX0 * 3;
+        out.set(image.data.subarray(srcOff, srcOff + tileRowBytes), dstOff);
+      }
+    }
+  }
+  return { width: FONT_SIZE.w, height: FONT_SIZE.h, data: out };
 }

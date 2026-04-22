@@ -7,7 +7,7 @@ import { useEffect } from "preact/hooks";
 import { signal, type Signal } from "@preact/signals";
 import { project } from "@/state/store";
 import { getAsset } from "@/state/assets";
-import { decodeBmp } from "@/loaders/bmp";
+import { decodeBmp, normalizeHdOsdFont } from "@/loaders/bmp";
 import { imageRgbaToTile } from "@/loaders/image-to-tile";
 import { rasterizeTtfSubset } from "@/loaders/ttf";
 import { createRng } from "@/compositor/palette";
@@ -51,7 +51,7 @@ export function useResolvedAssets(): ResolvedAssetsState {
       const errs: Record<string, string> = {};
       try {
         const next = emptyResolvedAssets();
-        await loadBitmapLayers(doc, next);
+        await loadBitmapLayers(doc, next, errs);
         await loadTtfLayers(doc, next, errs);
         await loadOverrideTiles(doc, next);
         if (!cancelled) {
@@ -103,18 +103,29 @@ export function useResolvedAssets(): ResolvedAssetsState {
   return state;
 }
 
-async function loadBitmapLayers(doc: ProjectDoc, out: ResolvedAssets): Promise<void> {
-  const hashes = new Set<string>();
+async function loadBitmapLayers(
+  doc: ProjectDoc,
+  out: ResolvedAssets,
+  errs: Record<string, string>,
+): Promise<void> {
   for (const layer of doc.font.layers) {
-    if (layer.kind === "bitmap" && layer.source.kind === "user") {
-      hashes.add(layer.source.hash);
+    if (layer.kind !== "bitmap") continue;
+    if (layer.source.kind !== "user") continue;
+    const rec = await getAsset(layer.source.hash);
+    if (!rec) {
+      errs[layer.id] = "asset not found in IndexedDB";
+      continue;
     }
-  }
-  for (const hash of hashes) {
-    const rec = await getAsset(hash);
-    if (!rec) continue;
-    const rgb = decodeBmp(rec.bytes);
-    out.bitmap.set(hash, rgb);
+    try {
+      const rgb = decodeBmp(rec.bytes);
+      // Auto-implode exploded 486×1350 community fonts down to the 384×1152
+      // compact layout. Compact inputs pass through unchanged. Anything else
+      // throws and surfaces to the UI as a per-layer error.
+      const normalized = normalizeHdOsdFont(rgb);
+      out.bitmap.set(layer.source.hash, normalized);
+    } catch (err) {
+      errs[layer.id] = err instanceof Error ? err.message : String(err);
+    }
   }
 }
 

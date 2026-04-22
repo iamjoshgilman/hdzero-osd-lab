@@ -85,6 +85,7 @@ export function OsdCanvas() {
   const [bg, setBg] = useState<BgKey>("chroma");
   const [fitWidth, setFitWidth] = useState<boolean>(true);
   const [bgDim, setBgDim] = useState<number>(0); // 0..1 darkening overlay over bg image
+  const [shareMsg, setShareMsg] = useState<string | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -274,6 +275,54 @@ export function OsdCanvas() {
     setDrag(next);
   };
 
+  /** Drop a one-off status message in the toolbar for `ms` milliseconds. */
+  const flashMsg = (text: string, ms = 1800) => {
+    setShareMsg(text);
+    window.setTimeout(() => setShareMsg(null), ms);
+  };
+
+  const getCanvasBlob = async (): Promise<Blob | null> => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    return new Promise((resolve) => {
+      canvas.toBlob((blob) => resolve(blob), "image/png");
+    });
+  };
+
+  const downloadPng = async () => {
+    const blob = await getCanvasBlob();
+    if (!blob) {
+      flashMsg("export failed");
+      return;
+    }
+    const name = (project.value.meta.name || "osd-preview").replace(/\s+/g, "-").toLowerCase();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${name}-osd.png`;
+    a.click();
+    URL.revokeObjectURL(url);
+    flashMsg("PNG downloaded");
+  };
+
+  const copyToClipboard = async () => {
+    try {
+      const blob = await getCanvasBlob();
+      if (!blob) {
+        flashMsg("copy failed");
+        return;
+      }
+      if (!navigator.clipboard || typeof ClipboardItem === "undefined") {
+        flashMsg("clipboard not supported — use Download PNG");
+        return;
+      }
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      flashMsg("copied to clipboard");
+    } catch (err) {
+      flashMsg(err instanceof Error ? `copy failed: ${err.message}` : "copy failed");
+    }
+  };
+
   const handlePointerUp = (e: PointerEvent) => {
     const d = dragStateRef.current;
     dragStateRef.current = null;
@@ -345,6 +394,23 @@ export function OsdCanvas() {
             <span>{Math.round(bgDim * 100)}%</span>
           </label>
         )}
+        <div class="flex items-center gap-2 ml-auto">
+          <button
+            onClick={copyToClipboard}
+            class="px-2 py-1 rounded bg-slate-800 text-slate-100 hover:bg-slate-700 border border-slate-700 text-xs"
+            title="Copy current OSD view as a PNG to the clipboard"
+          >
+            ⧉ Copy
+          </button>
+          <button
+            onClick={downloadPng}
+            class="px-2 py-1 rounded bg-osd-mint text-slate-900 hover:bg-emerald-300 text-xs font-semibold"
+            title="Download current OSD view as a PNG"
+          >
+            ↓ PNG
+          </button>
+        </div>
+        {shareMsg && <span class="text-osd-mint">{shareMsg}</span>}
         {loading.value && <span class="text-osd-amber">Loading assets…</span>}
         {error.value && <span class="text-osd-alert">{error.value}</span>}
       </div>

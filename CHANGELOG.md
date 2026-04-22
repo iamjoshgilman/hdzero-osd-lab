@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.8] - 2026-04-22
+
+### Added — OSD preview export
+
+- **↓ PNG** button in the OSD toolbar — saves the current composed OSD view (font + element layout + optional FPV background + any color tints) as a PNG, named after the project's `meta.name`. Ready-to-share.
+- **⧉ Copy** button — copies the same PNG straight to the clipboard via `navigator.clipboard.write(new ClipboardItem(...))`. Paste directly into Discord / Reddit / Photoshop. Falls back gracefully with a message if the browser lacks the ClipboardItem API.
+- Transient status message in the toolbar confirms "copied to clipboard" / "PNG downloaded" / error messages for 1.8 s after each action.
+
+### Notes
+
+- Chrome / Edge / Firefox 94+ / Safari 13.4+ all support the Clipboard API image write. On HTTP (not HTTPS) contexts the API is restricted, but localhost is fine.
+- PNG export captures the canvas at its native 1272×720 resolution regardless of the "Fit width" display toggle, so shared screenshots are full quality.
+
+### Bumped
+
+- `package.json` version `0.2.7` → `0.2.8`.
+
 ## [0.2.7] - 2026-04-22
 
 ### Added — Exploded-format BMP support

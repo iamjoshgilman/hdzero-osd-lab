@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-04-22 — Phase 2 "OSD Live Preview" complete
+
+Phase 2 is done. The OSD tab is a fully-interactive real-time simulator of what a Betaflight HD OSD will look like over live video, built on top of the v0.1.x compositor. Key wins:
+
+- **63 OSD elements** with author-curated default positions and plausible live-value samples — approaches 1:1 parity with stock Betaflight's OSD tab.
+- **Live font rendering** — edits on the Font tab show up immediately in the OSD preview using the composed font as a sprite atlas. Chroma-gray pixels are treated as transparent, matching goggle compositing.
+- **Drag-to-reposition** with snap-to-grid, clamping to the 53×20 canvas, one undo entry per drop.
+- **Click-to-select** with neon-mint highlight box on the canvas and in the sidebar.
+- **Element library sidebar** with 7 categories (RC / Power / Nav / Flight / Timer / Status / Decorative), bulk "All on" / "All off" / "Reset to defaults" buttons.
+- **Selected-element inspector panel** at the top of the sidebar with a live text input for freeform slots (Craft Name, Pilot Name, 4 Custom Messages, Serial Text). Type your callsign, watch it render against your font instantly.
+- **FPV background upload** — drop any PNG/JPG; persisted via IndexedDB across reloads.
+- **4 background presets** (Skyscraper dive / Mountain surfing / Bando / Dusk low-light) — drop AI-generated or user-provided images into `public/fpv-backgrounds/` and click to load.
+- **Optional Dim slider** and solid-color bg fallback for when no image is present.
+
+### Final tweaks in this tag commit
+
+- Renamed the `waterfall` preset to `mountain-surfing` to match the user's sourced imagery.
+- Bumped `package.json` version `0.0.0` → `0.2.0`.
+
+### Totals
+
+126 tests, typecheck clean, 27.32 KB gzipped production bundle. Source code around 3,800 lines of TypeScript across compositor, loaders, encoders, state, osd-schema, and ui modules.
+
+### Next
+
+- **v0.3.0** — Decoration Generator. Visual Craft Name and post-flight warning-message designers that produce the exact 15-char string to paste into Betaflight Configurator.
+- Or minor v0.2.x follow-ups for papercuts + features: TTF palette layer UI (bring the Python fork's headline feature into the web app), HDZero library browser, logo preview panel.
+
 ## [0.2.0-alpha.8] - 2026-04-22
 
 ### Changed

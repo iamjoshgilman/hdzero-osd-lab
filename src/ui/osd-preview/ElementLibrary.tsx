@@ -198,10 +198,10 @@ const BG_PRESETS: readonly BgPreset[] = [
       "FPV racing drone diving between tall glass-and-steel skyscrapers, downtown city, late afternoon golden hour, motion blur, wide-angle GoPro lens, photorealistic, 16:9.",
   },
   {
-    file: "waterfall.jpg",
-    label: "Cinematic waterfall",
+    file: "mountain-surfing.jpg",
+    label: "Mountain surfing",
     prompt:
-      "Cinematic FPV drone glide close to a massive forest waterfall, cascading water, lush ferns and moss, sunlight through canopy, soft mist haze, photorealistic, 16:9.",
+      "FPV drone proximity flight following the contour of a rugged mountain slope, close to pine trees and exposed rock, afternoon light, dramatic depth, fast motion, cinematic GoPro-style wide angle, photorealistic, 16:9.",
   },
   {
     file: "bando.jpg",

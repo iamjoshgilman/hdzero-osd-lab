@@ -12,13 +12,13 @@ Suggested output: **1920×1080** (or any 16:9 resolution ≥ 1280×720). Smaller
 
 > First-person view from an FPV racing drone diving between tall glass-and-steel skyscrapers in a downtown city, late afternoon golden hour, slight motion blur, wide-angle GoPro lens, photorealistic, cinematic, 16:9.
 
-## waterfall.jpg
+## mountain-surfing.jpg
 
-Cinematic nature shot.
+Proximity flight hugging a mountain slope — fast descent paralleling the terrain.
 
 **Suggested prompt:**
 
-> Cinematic FPV drone shot gliding close to a massive forest waterfall, cascading water in motion, lush green ferns and moss-covered rocks, shafts of sunlight breaking through the tree canopy, soft mist haze, photorealistic film look, 16:9.
+> FPV drone proximity flight following the contour of a rugged mountain slope, close to pine trees and exposed rock, afternoon light, dramatic depth, fast motion, cinematic GoPro-style wide angle, photorealistic, 16:9.
 
 ## bando.jpg
 

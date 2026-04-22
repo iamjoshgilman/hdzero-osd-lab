@@ -113,7 +113,7 @@ function TopBar({
         <span class="text-osd-mint">hdzero-</span>
         <span class="text-osd-cyan">osd-</span>
         <span class="text-osd-magenta">lab</span>
-        <span class="text-slate-500 text-xs ml-2 font-normal">v0.1.0</span>
+        <span class="text-slate-500 text-xs ml-2 font-normal">v{__APP_VERSION__}</span>
       </h1>
       <div class="flex gap-2">
         <Button

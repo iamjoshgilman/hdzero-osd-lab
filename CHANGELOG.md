@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.21] - 2026-04-22
+
+### Fixed
+
+- **In-app version tag was hardcoded to `v0.1.0`.** Top bar still displayed the Phase 1 MVP version no matter how far the project had progressed. Wired Vite's `define` to read `package.json`'s version at build time and inject it as `__APP_VERSION__`, which the AppShell top bar now renders. One source of truth — the CHANGELOG, git tag, package.json, and the badge in the UI will never drift again.
+
+### Bumped
+
+- `package.json` version `0.2.20` → `0.2.21`.
+
 ## [0.2.20] - 2026-04-22
 
 ### Added — Public release prep

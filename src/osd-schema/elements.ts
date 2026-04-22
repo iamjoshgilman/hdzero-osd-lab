@@ -85,6 +85,11 @@ const SYM_MPS = 0x9f;
 const SYM_BATT_FULL = 0x90;
 const SYM_BATT_EMPTY = 0x96;
 const SYM_MAIN_BATT = 0x97;
+const SYM_PB_START = 0x8a;
+const SYM_PB_FULL = 0x8b;
+const SYM_PB_HALF = 0x8c;
+const SYM_PB_EMPTY = 0x8d;
+const SYM_PB_END = 0x8e;
 const SYM_AH_LEFT = 0x03;
 const SYM_AH_RIGHT = 0x02;
 const SYM_AH_CENTER = 0x73;
@@ -208,11 +213,28 @@ export const OSD_ELEMENTS: readonly OsdElement[] = [
   },
   {
     id: "main_batt_usage",
-    label: "Battery Usage Bar",
+    label: "Battery Usage (Graphical)",
     category: "power",
-    defaultPos: { x: 8, y: 13 },
-    defaultEnabled: false,
-    sample: [SYM_BATT_FULL, SYM_BATT_FULL, SYM_BATT_FULL, SYM_BATT_EMPTY],
+    defaultPos: { x: 10, y: 15 },
+    defaultEnabled: true,
+    // BF's "Graphical remaining" battery bar: START cap, fill tiles,
+    // transition half-tile, empty tiles, END cap. ~60% remaining looks
+    // right for a preview sample.
+    sample: [
+      SYM_PB_START,
+      SYM_PB_FULL,
+      SYM_PB_FULL,
+      SYM_PB_FULL,
+      SYM_PB_FULL,
+      SYM_PB_FULL,
+      SYM_PB_FULL,
+      SYM_PB_HALF,
+      SYM_PB_EMPTY,
+      SYM_PB_EMPTY,
+      SYM_PB_EMPTY,
+      SYM_PB_END,
+    ],
+    note: "BF can also render this as numeric % or consumed mAh — this preview shows the default graphical bar.",
   },
 
   // ---- Navigation ----

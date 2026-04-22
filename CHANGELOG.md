@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.6] - 2026-04-22
+
+### Fixed
+
+- `main_batt_usage` ("Battery Usage") now renders the **graphical progress-bar** that real Betaflight Configurator ships (codes `SYM_PB_START` 0x8A through `SYM_PB_END` 0x8E). The previous sample used four `SYM_BATT_FULL/EMPTY` cell icons — that combination isn't an OSD element in actual Betaflight; cell icons are used internally as the dynamic prefix for `avg_cell_voltage` only. Default position moved to (10,15) and default-enabled since virtually every BF layout uses this element.
+
+### Notes
+
+- Spotted by a real BF Configurator screenshot comparison. Good example of why v0.2.0 + screenshots-against-truth is the right iteration rhythm.
+
 ## [0.2.0-alpha.5] - 2026-04-22
 
 ### Added — Full-ish BF element parity + editable text

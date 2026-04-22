@@ -11,6 +11,7 @@ import { FontPreview } from "@/ui/font-editor/FontPreview";
 import { InspectorPanel } from "@/ui/font-editor/InspectorPanel";
 import { TabBar } from "@/ui/shell/TabBar";
 import { OsdCanvas } from "@/ui/osd-preview/OsdCanvas";
+import { ElementLibrary } from "@/ui/osd-preview/ElementLibrary";
 import { DecorationStub } from "@/ui/decoration/DecorationStub";
 
 export function AppShell() {
@@ -44,6 +45,7 @@ export function AppShell() {
           {view.value === "decoration" && <DecorationStub />}
         </section>
         {view.value === "font" && <InspectorPanel />}
+        {view.value === "osd" && <ElementLibrary />}
       </main>
       <StatusBar />
     </div>

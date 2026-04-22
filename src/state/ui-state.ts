@@ -9,3 +9,6 @@ export const selectedGlyph = signal<number | null>(null);
 /** Which major workspace tab is visible. */
 export type ViewMode = "font" | "osd" | "decoration";
 export const currentView = signal<ViewMode>("font");
+
+/** Currently-selected OSD element id (in the OSD Preview tab), or null. */
+export const selectedOsdElement = signal<string | null>(null);

@@ -8,7 +8,8 @@
 
 import { useEffect, useRef, useState } from "preact/hooks";
 import { useComputed } from "@preact/signals";
-import { project } from "@/state/store";
+import { project, mutate } from "@/state/store";
+import { selectedOsdElement } from "@/state/ui-state";
 import { compose } from "@/compositor/compose";
 import { useResolvedAssets } from "@/ui/hooks/useResolvedAssets";
 import { FONT_SIZE, GLYPH_SIZE, codeToOrigin } from "@/compositor/constants";
@@ -48,10 +49,20 @@ function effectivePosition(element: OsdElement, doc: ProjectDoc): EffectivePosit
   };
 }
 
+/** Transient drag state: which element is being dragged and where it currently sits in grid cells. */
+interface DragState {
+  elementId: string;
+  col: number;
+  row: number;
+}
+
 export function OsdCanvas() {
   const { assets, loading, error } = useResolvedAssets();
   const atlas = useComputed(() => compose(project.value, assets.value));
+  const selected = useComputed(() => selectedOsdElement.value);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const dragStateRef = useRef<DragState | null>(null);
+  const [drag, setDrag] = useState<DragState | null>(null);
   const [bg, setBg] = useState<BgKey>("chroma");
   const [fitWidth, setFitWidth] = useState<boolean>(true);
 
@@ -99,21 +110,152 @@ export function OsdCanvas() {
 
     ctx.imageSmoothingEnabled = false;
 
-    // Blit every enabled element's sample glyphs.
+    // Blit every enabled element's sample glyphs. For the element currently
+    // being dragged, use the drag's live position instead of the project's.
     for (const element of OSD_ELEMENTS) {
-      const pos = effectivePosition(element, project.value);
-      if (!pos.enabled) continue;
+      const base = effectivePosition(element, project.value);
+      if (!base.enabled) continue;
+      const livePos =
+        drag && drag.elementId === element.id ? { x: drag.col, y: drag.row } : base;
       for (let i = 0; i < element.sample.length; i++) {
         const code = element.sample[i]!;
-        const col = pos.x + i;
-        if (col >= OSD_GRID.cols) break;
+        const col = livePos.x + i;
+        if (col >= OSD_GRID.cols || col < 0) break;
         const { x: sx, y: sy } = codeToOrigin(code);
         const dx = col * GLYPH_SIZE.w;
-        const dy = pos.y * GLYPH_SIZE.h;
+        const dy = livePos.y * GLYPH_SIZE.h;
+        if (dy < 0 || dy + GLYPH_SIZE.h > OSD_H_PX) continue;
         ctx.drawImage(off, sx, sy, GLYPH_SIZE.w, GLYPH_SIZE.h, dx, dy, GLYPH_SIZE.w, GLYPH_SIZE.h);
       }
     }
-  }, [atlas.value, bg]);
+
+    // Selection highlight — neon-mint box around the selected element.
+    if (selected.value) {
+      const el = OSD_ELEMENTS.find((e) => e.id === selected.value);
+      if (el) {
+        const base = effectivePosition(el, project.value);
+        const livePos =
+          drag && drag.elementId === el.id ? { x: drag.col, y: drag.row } : base;
+        if (base.enabled) {
+          ctx.strokeStyle = "#00ffaa";
+          ctx.lineWidth = 2;
+          ctx.shadowColor = "#00ffaa";
+          ctx.shadowBlur = 6;
+          ctx.strokeRect(
+            livePos.x * GLYPH_SIZE.w - 1,
+            livePos.y * GLYPH_SIZE.h - 1,
+            el.sample.length * GLYPH_SIZE.w + 2,
+            GLYPH_SIZE.h + 2,
+          );
+          ctx.shadowBlur = 0;
+        }
+      }
+    }
+  }, [atlas.value, bg, drag, selected.value]);
+
+  /** Map a pointer event to grid (col, row). */
+  const pointerToCell = (e: PointerEvent): { col: number; row: number } | null => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const px = ((e.clientX - rect.left) / rect.width) * OSD_W_PX;
+    const py = ((e.clientY - rect.top) / rect.height) * OSD_H_PX;
+    const col = Math.floor(px / GLYPH_SIZE.w);
+    const row = Math.floor(py / GLYPH_SIZE.h);
+    if (col < 0 || col >= OSD_GRID.cols || row < 0 || row >= OSD_GRID.rows) return null;
+    return { col, row };
+  };
+
+  /** Find the topmost enabled element whose rendered footprint contains the given cell. */
+  const hitTest = (col: number, row: number): OsdElement | null => {
+    // Walk in reverse so later-drawn elements win ties visually.
+    for (let i = OSD_ELEMENTS.length - 1; i >= 0; i--) {
+      const el = OSD_ELEMENTS[i]!;
+      const pos = effectivePosition(el, project.value);
+      if (!pos.enabled) continue;
+      if (row === pos.y && col >= pos.x && col < pos.x + el.sample.length) return el;
+    }
+    return null;
+  };
+
+  const handlePointerDown = (e: PointerEvent) => {
+    const cell = pointerToCell(e);
+    if (!cell) return;
+    const hit = hitTest(cell.col, cell.row);
+    if (!hit) {
+      selectedOsdElement.value = null;
+      return;
+    }
+    selectedOsdElement.value = hit.id;
+    const pos = effectivePosition(hit, project.value);
+    // Record the offset from the element's origin so the element doesn't jump
+    // under the cursor when dragging from its middle.
+    const offsetCol = cell.col - pos.x;
+    const offsetRow = cell.row - pos.y;
+    const initial: DragState = { elementId: hit.id, col: pos.x, row: pos.y };
+    dragStateRef.current = initial;
+    setDrag(initial);
+    (e.currentTarget as HTMLCanvasElement).setPointerCapture(e.pointerId);
+
+    // Stash the offset on the ref via a side channel — cheapest option.
+    (dragStateRef.current as DragState & { _offCol?: number; _offRow?: number })._offCol =
+      offsetCol;
+    (dragStateRef.current as DragState & { _offCol?: number; _offRow?: number })._offRow =
+      offsetRow;
+  };
+
+  const handlePointerMove = (e: PointerEvent) => {
+    if (!dragStateRef.current) return;
+    const cell = pointerToCell(e);
+    if (!cell) return;
+    const offCol =
+      (dragStateRef.current as DragState & { _offCol?: number })._offCol ?? 0;
+    const offRow =
+      (dragStateRef.current as DragState & { _offRow?: number })._offRow ?? 0;
+    const el = OSD_ELEMENTS.find((x) => x.id === dragStateRef.current!.elementId);
+    if (!el) return;
+    const width = el.sample.length;
+    const newCol = Math.max(0, Math.min(OSD_GRID.cols - width, cell.col - offCol));
+    const newRow = Math.max(0, Math.min(OSD_GRID.rows - 1, cell.row - offRow));
+    const next: DragState = { elementId: dragStateRef.current.elementId, col: newCol, row: newRow };
+    // Preserve the offsets across renders.
+    (next as DragState & { _offCol?: number; _offRow?: number })._offCol = offCol;
+    (next as DragState & { _offCol?: number; _offRow?: number })._offRow = offRow;
+    dragStateRef.current = next;
+    setDrag(next);
+  };
+
+  const handlePointerUp = (e: PointerEvent) => {
+    const d = dragStateRef.current;
+    dragStateRef.current = null;
+    if (!d) return;
+    const canvas = canvasRef.current;
+    try {
+      canvas?.releasePointerCapture(e.pointerId);
+    } catch {
+      // Safari/older browsers can throw if capture was not held
+    }
+    const el = OSD_ELEMENTS.find((x) => x.id === d.elementId);
+    if (!el) {
+      setDrag(null);
+      return;
+    }
+    const basePos = effectivePosition(el, project.value);
+    if (basePos.x === d.col && basePos.y === d.row) {
+      // No movement — skip the mutation to avoid a no-op undo entry.
+      setDrag(null);
+      return;
+    }
+    mutate((doc) => {
+      const existing = doc.osdLayout.elements[el.id];
+      doc.osdLayout.elements[el.id] = {
+        x: d.col,
+        y: d.row,
+        enabled: existing ? existing.enabled : el.defaultEnabled,
+      };
+    });
+    setDrag(null);
+  };
 
   return (
     <div class="flex flex-col items-center gap-3 w-full">
@@ -152,11 +294,17 @@ export function OsdCanvas() {
       >
         <canvas
           ref={canvasRef}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          class={drag ? "cursor-grabbing" : "cursor-grab"}
           style={{
             width: "100%",
             height: "100%",
             imageRendering: "pixelated",
             display: "block",
+            touchAction: "none",
           }}
         />
       </div>

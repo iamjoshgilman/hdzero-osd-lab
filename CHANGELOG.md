@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.3] - 2026-04-22
+
+### Added — Interactive OSD layout editor
+
+- **Drag-to-reposition** on the OSD canvas. Click-and-drag any rendered element to move it; the new position commits on pointer up as a single undo entry (the intermediate drag frames don't pollute the undo stack). Elements are clamped to the 53×20 grid so they can't be dragged off-screen. Uses pointer events with `setPointerCapture` for smooth behavior and a native "grab" / "grabbing" cursor.
+- **Selection highlight** — clicking any element on the canvas (or in the library) draws a neon-mint box around it, matching the Font tab's glyph-selection style.
+- **Element library sidebar** (`src/ui/osd-preview/ElementLibrary.tsx`) — right-side panel on the OSD tab, showing all 33 elements grouped by category (RC link / Power / Navigation / Flight / Timers / Status / Decorative). Each row has an enable checkbox, label, and its current grid position. Click the row to select the element on the canvas.
+- **Bulk controls:** "All on", "All off", "Reset to defaults" buttons at the top of the library. Reset wipes `project.osdLayout.elements` entirely, falling back to the schema defaults.
+
+### Changed
+
+- `AppShell` now renders `<ElementLibrary />` as the right column on the OSD tab (the slot `InspectorPanel` uses on the Font tab).
+
+### New state
+
+- `selectedOsdElement: Signal<string | null>` added to `src/state/ui-state.ts`. Shared between the library and the canvas so clicking either stays in sync.
+
+### Notes
+
+- Live drag updates a local `drag` state without touching the project doc; the `mutate()` that writes `osdLayout.elements[id]` runs once on pointer-up. This keeps the undo stack clean (one drag = one undo step) and avoids IndexedDB churn during motion.
+- alpha.4 work: FPV background image upload + a small status line showing "element under cursor" for better targeting. Then v0.2.0 tag ships.
+
 ## [0.2.0-alpha.2] - 2026-04-22
 
 ### Added — OSD canvas renderer

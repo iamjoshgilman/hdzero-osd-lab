@@ -86,33 +86,7 @@ export function LayersPanel() {
           label="Drop a 384×1152 BMP"
           onFile={addBaseBmp}
         />
-        <div class="mt-2 flex flex-col gap-1">
-          <p class="text-[10px] font-mono text-slate-500">or start with a sample:</p>
-          <div class="flex gap-2">
-            <Button
-              variant="secondary"
-              onClick={() => loadSample("ondrascz-grey.bmp", "ondrascz grey (sample)")}
-              class="flex-1 !px-2 !py-1 !text-[10px]"
-            >
-              Grey starter
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => loadSample("ondrascz-color.bmp", "ondrascz color (sample)")}
-              class="flex-1 !px-2 !py-1 !text-[10px]"
-            >
-              Color starter
-            </Button>
-          </div>
-          <p class="text-[9px] text-slate-600 leading-tight">
-            by <a
-              href="https://github.com/ondrascz/HD-OSD-Font-Tools"
-              target="_blank"
-              rel="noreferrer"
-              class="underline hover:text-slate-400"
-            >ondrascz</a>, MIT licensed.
-          </p>
-        </div>
+        <SampleFontPicker onPick={loadSample} />
       </section>
 
       <section>
@@ -178,6 +152,99 @@ export function LayersPanel() {
         </ul>
       </section>
     </aside>
+  );
+}
+
+interface SampleFontEntry {
+  file: string;
+  label: string;
+  author: string;
+  sourceUrl: string;
+}
+
+/**
+ * Curated list of sample fonts shipped in public/sample-fonts/. The first
+ * four are from the HDZero community font library (no explicit LICENSE
+ * upstream — redistributed here with author credit, removable on request).
+ * The last is the MIT-licensed ondrascz color font from the Python tool.
+ */
+const SAMPLE_FONTS: readonly SampleFontEntry[] = [
+  {
+    file: "BTFL_SNEAKY_FPV_Default_V1.0.0.bmp",
+    label: "Sneaky FPV — Default",
+    author: "Sneaky FPV",
+    sourceUrl: "https://github.com/hd-zero/hdzero-osd-font-library",
+  },
+  {
+    file: "BTFL_Ligen_Rainbow_V1.0.1.bmp",
+    label: "Ligen — Rainbow",
+    author: "Ligen",
+    sourceUrl: "https://github.com/hd-zero/hdzero-osd-font-library",
+  },
+  {
+    file: "BTFL_johhngoblin_teamBBL_v1.0.0.bmp",
+    label: "johhngoblin — Team BBL",
+    author: "johhngoblin",
+    sourceUrl: "https://github.com/hd-zero/hdzero-osd-font-library",
+  },
+  {
+    file: "BTFL_ondrascz_minimal_uppercase_color_bf-plain_V1.0.0.bmp",
+    label: "ondrascz — Minimal Upper Color",
+    author: "ondrascz",
+    sourceUrl: "https://github.com/hd-zero/hdzero-osd-font-library",
+  },
+  {
+    file: "ondrascz-color.bmp",
+    label: "ondrascz — Color (MIT)",
+    author: "ondrascz",
+    sourceUrl: "https://github.com/ondrascz/HD-OSD-Font-Tools",
+  },
+];
+
+function SampleFontPicker({ onPick }: { onPick: (filename: string, displayName: string) => void }) {
+  const selectRef = useRef<HTMLSelectElement>(null);
+  const go = () => {
+    const sel = selectRef.current;
+    if (!sel || sel.value === "") return;
+    const entry = SAMPLE_FONTS.find((e) => e.file === sel.value);
+    if (entry) onPick(entry.file, entry.label);
+    sel.value = "";
+  };
+  return (
+    <div class="mt-2 flex flex-col gap-1">
+      <p class="text-[10px] font-mono text-slate-500">or start with a community sample:</p>
+      <div class="flex gap-2">
+        <select
+          ref={selectRef}
+          defaultValue=""
+          class="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-[11px] text-slate-100 font-mono"
+        >
+          <option value="" disabled>
+            Pick a font…
+          </option>
+          {SAMPLE_FONTS.map((s) => (
+            <option key={s.file} value={s.file}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+        <Button variant="secondary" onClick={go} class="!px-3 !py-1 !text-xs">
+          Load
+        </Button>
+      </div>
+      <p class="text-[9px] text-slate-600 leading-tight">
+        from the{" "}
+        <a
+          href="https://github.com/hd-zero/hdzero-osd-font-library"
+          target="_blank"
+          rel="noreferrer"
+          class="underline hover:text-slate-400"
+        >
+          HDZero community font library
+        </a>
+        . Authors credited in NOTICE. Submit an issue if you'd like a font removed.
+      </p>
+    </div>
   );
 }
 

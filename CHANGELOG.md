@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-04-21
+
+### Removed
+
+- **Grey starter** sample font was pulled. The font is designed as an intentionally low-contrast template (glyph pixels at `(113,113,113)` vs chroma-gray `(127,127,127)` — only 6% contrast) meant to be overlaid with TTF letters. Standalone it's effectively invisible, which was confusing every user who loaded it first. `public/sample-fonts/ondrascz-grey.bmp` deleted.
+
+### Added
+
+- Four sample fonts from the [HDZero community font library](https://github.com/hd-zero/hdzero-osd-font-library), giving users variety on first load:
+  - `BTFL_SNEAKY_FPV_Default_V1.0.0.bmp` — by Sneaky FPV
+  - `BTFL_Ligen_Rainbow_V1.0.1.bmp` — by Ligen
+  - `BTFL_johhngoblin_teamBBL_v1.0.0.bmp` — by johhngoblin
+  - `BTFL_ondrascz_minimal_uppercase_color_bf-plain_V1.0.0.bmp` — by ondrascz
+- New `SampleFontPicker` component in `LayersPanel` replaces the single button with a dropdown of 5 fonts (4 community + 1 upstream ondrascz MIT). Each entry keeps the author attribution visible.
+- New `extractBtflLogoBanner()` helper in `src/compositor/atlas.ts` — reverses the Z-wrap layout to produce the 576×144 banner as it appears in-flight. Currently unused in the UI; saved for Phase 2 OSD preview (or a v0.1.8 "Logo preview" panel).
+- `NOTICE` gained a dedicated HDZero community library section with per-font author credit and an explicit removal policy (open an issue, we pull it).
+
+### Notes
+
+- Two additional community fonts (`BTFL_analog_default_v1.0.0.bmp`, `BTFL_slappyfpv_graffiti_v1.0.0.bmp`) were dropped because they ship in the **exploded** 486×1350 format with 6px tile gaps. Our `decodeBmp` currently expects the compact 384×1152 form. Implode/explode round-trip support is a small loader addition slated for a later patch.
+- Upstream HDZero library has no explicit `LICENSE` file — redistribution is with community-trust attribution, removable on request (per maintainer preference).
+
 ## [0.1.6] - 2026-04-21
 
 ### Changed — Preview background simulates goggle output

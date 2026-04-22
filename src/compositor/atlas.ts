@@ -72,6 +72,48 @@ export function extractTile(atlas: Uint8ClampedArray, code: number): Tile {
 }
 
 /**
+ * Reverse of the BTFL logo Z-wrap in compose.ts: reassemble the 576×144
+ * BETAFLIGHT banner from its 8 scattered strips across atlas rows 10..15.
+ * This is how the banner appears in-flight when Betaflight unwraps the tiles.
+ *
+ * Returns a fresh 576×144 RGB buffer (no alpha — use the same chroma-key
+ * semantics as the source atlas).
+ */
+export function extractBtflLogoBanner(atlas: Uint8ClampedArray): {
+  width: number;
+  height: number;
+  data: Uint8ClampedArray;
+} {
+  const bw = 576;
+  const bh = 144;
+  const out = new Uint8ClampedArray(bw * bh * 3);
+  const atlasStride = FONT_SIZE.w * 3; // 1152
+  const bannerStride = bw * 3; // 1728
+
+  // Mirror image of the rect list in compose.ts applyLogoLayer (btfl slot).
+  // Each entry: copy from atlas[(dx,dy)..(dx+sw,dy+sh)] → banner[(sx,sy)..(sx+sw,sy+sh)].
+  const rects: Array<{ sx: number; sy: number; sw: number; sh: number; dx: number; dy: number }> = [
+    { sx: 0, sy: 0, sw: 384, sh: 36, dx: 0, dy: 360 },
+    { sx: 384, sy: 0, sw: 192, sh: 36, dx: 0, dy: 396 },
+    { sx: 0, sy: 36, sw: 192, sh: 36, dx: 192, dy: 396 },
+    { sx: 192, sy: 36, sw: 384, sh: 36, dx: 0, dy: 432 },
+    { sx: 0, sy: 72, sw: 384, sh: 36, dx: 0, dy: 468 },
+    { sx: 384, sy: 72, sw: 192, sh: 36, dx: 0, dy: 504 },
+    { sx: 0, sy: 108, sw: 192, sh: 36, dx: 192, dy: 504 },
+    { sx: 192, sy: 108, sw: 384, sh: 36, dx: 0, dy: 540 },
+  ];
+
+  for (const r of rects) {
+    for (let row = 0; row < r.sh; row++) {
+      const srcOff = (r.dy + row) * atlasStride + r.dx * 3;
+      const dstOff = (r.sy + row) * bannerStride + r.sx * 3;
+      out.set(atlas.subarray(srcOff, srcOff + r.sw * 3), dstOff);
+    }
+  }
+  return { width: bw, height: bh, data: out };
+}
+
+/**
  * Blit an arbitrarily-sized RGBA strip into a rectangular region of the atlas.
  * Transparent pixels (alpha 0) are skipped; partially-transparent pixels are
  * alpha-composited onto the atlas. Used by logo placement.

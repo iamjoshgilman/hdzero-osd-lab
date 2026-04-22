@@ -14,12 +14,25 @@ data and documented behavior.
    by a WhiteRqbbit fork that added palette TTF rendering and per-glyph
    image overrides.
 
-   The sample base fonts bundled in `public/sample-fonts/` are also
-   originally by ondrascz:
-   - `ondrascz-grey.bmp` — derived from `resources/fonts/BTFL_ondrascz_grey.png`
+   One sample in `public/sample-fonts/` is from this upstream:
    - `ondrascz-color.bmp` — derived from `resources/fonts/BTFL_ondrascz_color.bmp`
-   Both converted to 24-bit BMP v3 for direct `BTFL_000.bmp` compatibility.
-   Redistributed here under the upstream MIT terms.
+     (24-bit BMP v3, SD-card-ready). Redistributed under the upstream MIT terms.
+
+2b. HDZero community OSD font library
+   https://github.com/hd-zero/hdzero-osd-font-library
+   The remaining sample fonts in `public/sample-fonts/` are from the
+   community font library maintained by HDZero (the goggles manufacturer).
+   The upstream repository does NOT include an explicit LICENSE file at
+   time of import. These fonts are redistributed here with prominent
+   author credit on the theory that the library is clearly published for
+   community use. If any author or HDZero would prefer their font not be
+   redistributed in this repo, open an issue and it will be removed
+   promptly:
+
+   - `BTFL_SNEAKY_FPV_Default_V1.0.0.bmp` — by Sneaky FPV
+   - `BTFL_Ligen_Rainbow_V1.0.1.bmp` — by Ligen
+   - `BTFL_johhngoblin_teamBBL_v1.0.0.bmp` — by johhngoblin
+   - `BTFL_ondrascz_minimal_uppercase_color_bf-plain_V1.0.0.bmp` — by ondrascz
 
 2. Betaflight Configurator (JavaScript, GPL-3.0)
    https://github.com/betaflight/betaflight-configurator

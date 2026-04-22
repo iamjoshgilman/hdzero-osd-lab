@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.8] - 2026-04-22
+
+### Changed
+
+- **Warnings element re-enabled** by default and repositioned to `(21, 13)` — horizontally centered (sample is 11 chars, `(53-11)/2 = 21`) and vertically between the crosshair at y=9 and the flymode label at y=18. Important to see how a font handles the warning text ("LOW VOLTAGE") against different backgrounds.
+
+### Added
+
+- **FPV background presets** section in the OSD sidebar. Four labeled buttons for the scene archetypes:
+  - **Skyscraper dive** — gorilla-whooping big-building descent
+  - **Cinematic waterfall** — nature fly-through
+  - **Bando** — abandoned warehouse interior
+  - **Dusk low-light** — tricky low-contrast readability test
+- Each preset fetches `public/fpv-backgrounds/{file}`. If the file isn't present, a helpful alert shows the suggested AI-generation prompt and the expected filename.
+- `public/fpv-backgrounds/README.md` — full prompt recipes for each preset, notes on resolution (≥1280×720, 1920×1080 preferred), and a licensing note explaining why the repo doesn't bundle AI-generated imagery.
+
+### Notes
+
+- No images are bundled in the repo. Users generate with their preferred AI tool, drop the files into `public/fpv-backgrounds/`, and the preset buttons light up. Clean licensing story.
+
 ## [0.2.0-alpha.7] - 2026-04-22
 
 ### Changed — Minimal starter layout

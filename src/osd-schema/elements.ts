@@ -351,8 +351,10 @@ export const OSD_ELEMENTS: readonly OsdElement[] = [
     id: "warnings",
     label: "Warnings",
     category: "status",
-    defaultPos: { x: 9, y: 10 },
-    defaultEnabled: false,
+    // Centered horizontally (sample is 11 chars → (53-11)/2 = 21),
+    // vertically between crosshairs at y=9 and flymode at y=18.
+    defaultPos: { x: 21, y: 13 },
+    defaultEnabled: true,
     sample: ch("LOW VOLTAGE"),
   },
   {

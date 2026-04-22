@@ -84,6 +84,30 @@ function enableAll(enabled: boolean): void {
   });
 }
 
+function BgPresetPicker() {
+  return (
+    <div class="mt-2 flex flex-col gap-1">
+      <p class="text-[10px] text-slate-500">or pick a preset:</p>
+      <div class="grid grid-cols-2 gap-1">
+        {BG_PRESETS.map((p) => (
+          <Button
+            key={p.file}
+            variant="secondary"
+            onClick={() => loadBgPreset(p)}
+            class="!px-2 !py-1 !text-[10px]"
+          >
+            {p.label}
+          </Button>
+        ))}
+      </div>
+      <p class="text-[9px] text-slate-600 leading-tight">
+        Presets read files from <code>public/fpv-backgrounds/</code>. Generate your own AI
+        stills using the prompts in the README there.
+      </p>
+    </div>
+  );
+}
+
 function SelectedElementPanel() {
   const selected = useComputed(() => selectedOsdElement.value);
   const id = selected.value;
@@ -153,6 +177,60 @@ async function setBackgroundImage(file: File): Promise<void> {
       mime: file.type || "image/png",
     };
   });
+}
+
+/**
+ * Presets look for files at public/fpv-backgrounds/<file>. If the file is
+ * absent we point the user at the README explaining how to generate one.
+ * Keeps the repo free of licensing concerns (no bundled imagery).
+ */
+interface BgPreset {
+  file: string;
+  label: string;
+  prompt: string;
+}
+
+const BG_PRESETS: readonly BgPreset[] = [
+  {
+    file: "skyscraper-dive.jpg",
+    label: "Skyscraper dive",
+    prompt:
+      "FPV racing drone diving between tall glass-and-steel skyscrapers, downtown city, late afternoon golden hour, motion blur, wide-angle GoPro lens, photorealistic, 16:9.",
+  },
+  {
+    file: "waterfall.jpg",
+    label: "Cinematic waterfall",
+    prompt:
+      "Cinematic FPV drone glide close to a massive forest waterfall, cascading water, lush ferns and moss, sunlight through canopy, soft mist haze, photorealistic, 16:9.",
+  },
+  {
+    file: "bando.jpg",
+    label: "Bando",
+    prompt:
+      "FPV drone interior of an abandoned industrial warehouse, concrete walls with graffiti, rusted steel beams, dusty shafts of sunlight through broken roof, GoPro ultra-wide, photorealistic, 16:9.",
+  },
+  {
+    file: "dusk-lowlight.jpg",
+    label: "Dusk low-light",
+    prompt:
+      "FPV drone dusk flight over a quiet suburban neighborhood, deep golden-blue sky, first stars appearing, dim street lights, long shadows, tricky low-contrast lighting, photorealistic, 16:9.",
+  },
+];
+
+async function loadBgPreset(preset: BgPreset): Promise<void> {
+  const url = `${import.meta.env.BASE_URL}fpv-backgrounds/${preset.file}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    alert(
+      `Preset "${preset.label}" not found at ${url}.\n\n` +
+        `Generate an image with a prompt like:\n\n${preset.prompt}\n\n` +
+        `Save it as "${preset.file}" inside public/fpv-backgrounds/ and refresh.`,
+    );
+    return;
+  }
+  const blob = await res.blob();
+  const file = new File([blob], preset.file, { type: blob.type });
+  await setBackgroundImage(file);
 }
 
 function clearBackgroundImage(): void {
@@ -245,6 +323,7 @@ export function ElementLibrary() {
             class="!p-3 !text-[11px]"
           />
         )}
+        <BgPresetPicker />
       </section>
 
       {CATEGORY_ORDER.map((cat) => {

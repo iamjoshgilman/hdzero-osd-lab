@@ -19,8 +19,6 @@ hdzero-osd-lab is a purely client-side, browser-based studio for designing OSD f
 
 **Planned next:** small follow-ups (HDZero font library browser, palette seed control, analog sample fonts) plus larger Phase 4 items (zip import/export, URL-fragment sharing, a11y completeness). See "Planned next" under Phase 4 below — no monolithic v1.0 milestone, items ship when worth shipping.
 
-**Deployment reality** (differs from the original GitHub Pages plan): source on public GitHub (MIT), CI builds on every push, self-hosted from a Proxmox LXC running Caddy behind Cloudflare Tunnel at `osd.iamjoshgilman.com`. Auto-deploy polls `origin/main` every 5 min.
-
 ## 2. Non-Goals
 
 - **Not** a replacement for Betaflight Configurator. We never flash, never talk MSP, never touch the FC directly. (The tool *produces* a `.mcm` the pilot uploads via Configurator in analog mode; we don't connect to the FC ourselves.)
@@ -354,7 +352,7 @@ User-requested papercut fixes and small wins that rode alongside v0.2.x / v0.3.0
 
 ### Phase 4 — "Planned next"
 
-Not a monolithic v1.0 release anymore — "polish as we go" has been the actual pattern (the app is already publicly live at osd.iamjoshgilman.com, MIT-licensed, CI green on every commit, auto-deployed). What's left is a short list of specific features, each shippable on its own timeline.
+Not a monolithic v1.0 release anymore — "polish as we go" has been the actual pattern (MIT-licensed, CI green on every commit). What's left is a short list of specific features, each shippable on its own timeline.
 
 #### v0.3.1 — In-browser pixel editor
 
@@ -400,23 +398,20 @@ What actually ships:
 - **Vitest unit tests**, 182 as of v0.3.0 across 21 files. Cover the compositor (atlas ops, compose dispatch, both HD and analog paths), loaders (BMP decode, MCM parse native + upscaled, image-to-tile at both target sizes, TTF arg validation), encoders (BMP byte-exact, MCM round-trip), state (project defaults + migration, persistence, undo, switchMode isolation, autosave debounce), and OSD schema invariants.
 - **Typecheck gate** via `tsc --noEmit` in strict mode with `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes`.
 - **CI on every push/PR** (`.github/workflows/build.yml`) runs typecheck + tests + production build, uploads `dist/` as a 30-day artifact.
-- **Browser verify before push** (see MEMORY / feedback notes) — features that touch `src/` get hands-on verification in `npm run dev` before the push, because Proxmox auto-deploys from `origin/main`.
+- **Browser verify before push** — features that touch `src/` get hands-on verification in `npm run dev` before the push.
 
 **Deliberately not pursuing:**
 
 - Playwright e2e. Manual browser verification has caught every real bug so far; the e2e infrastructure cost wouldn't pay off for a solo-maintained hobby project.
-- Lighthouse budget checks. Bundle's ~46 KB gzipped; that's well under any reasonable budget without automated gating.
+- Lighthouse budget checks. Bundle's ~53 KB gzipped; that's well under any reasonable budget without automated gating.
 - Golden image regression suites. The unit tests cover the byte-level invariants; visual regressions get caught during browser verify.
 - Cross-browser matrix. Works on current Chrome/Firefox/Edge. Safari not tested — the tool uses OffscreenCanvas and FontFace which Safari supports but is sometimes funky about; we don't block on Safari bugs.
 
-## 8. Deployment Pipeline
+## 8. Build + Release
 
-**Actual reality, different from the original plan:**
-
-- **CI — `.github/workflows/build.yml`.** On every push and PR: `npm ci`, typecheck, `npm run test:run`, `npm run build`. Uploads `dist/` as a 30-day artifact. Green badge in README.
-- **Self-hosted production.** Public GitHub repo ([iamjoshgilman/hdzero-osd-lab](https://github.com/iamjoshgilman/hdzero-osd-lab), MIT). Proxmox LXC container runs Caddy serving static `dist/` on localhost:8080. `cloudflared` tunnels to `osd.iamjoshgilman.com`. Strict CSP + security headers at the Caddy layer. No inbound ports on the host — the tunnel is outbound-only.
-- **Auto-deploy.** `systemd` timer on the LXC polls `origin/main` every 5 min; on new commit it runs a local `git pull && npm ci && npm run build && systemctl reload caddy`. Worst-case 5-min delay between push and live.
-- **Releases.** Tag per version (`v0.1.0`, `v0.2.x`, `v0.3.0`, etc.) pushed to GitHub after user confirms the feature works in-browser. Releases page renders the CHANGELOG entry and links the tagged commit.
+- **CI** — `.github/workflows/build.yml`. On every push and PR: `npm ci`, typecheck, `npm run test:run`, `npm run build`. Uploads `dist/` as a 30-day artifact. Green badge in README.
+- **Output** — `dist/` is a pure static bundle (HTML + JS + CSS + assets). No backend, no API routes, no runtime config. Deployable on anything that serves static files.
+- **Releases** — tag per version (`v0.1.0`, `v0.2.x`, `v0.3.0`, etc.) pushed to GitHub after the feature is browser-verified. Releases page renders the CHANGELOG entry and links the tagged commit.
 
 ## 9. Versioning
 
@@ -437,7 +432,7 @@ What actually ships:
 
 - ~~TTF rasterization parity with pygame~~ — our supersampling approach shipped in v0.1.x and has been validated in practice.
 - ~~BMP byte-parity with pygame~~ — v0.1.0 roundtrip tests lock byte-level output.
-- ~~Service worker cache invalidation~~ — no service worker shipped; cache-busting handled by Vite filename hashing + Caddy `Cache-Control` per path (index.html no-cache, assets immutable for 1y).
+- ~~Service worker cache invalidation~~ — no service worker shipped; cache-busting handled by Vite filename hashing.
 - ~~Web access parity with `fetch_icon.py`~~ — not pursued; upload flow works, game-icons.net fetching deferred indefinitely.
 
 ## 11. Credits & License

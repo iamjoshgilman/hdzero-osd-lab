@@ -1,12 +1,12 @@
 # hdzero-osd-lab — Implementation Plan
 
-Current release: **v0.3.2**. See [CHANGELOG.md](CHANGELOG.md) for per-release detail.
+Current release: **v0.3.3**. See [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 
 ## 1. Elevator Pitch
 
 hdzero-osd-lab is a purely client-side, browser-based studio for designing OSD fonts for Betaflight quads. It supports two targets: **HDZero HD** (24-bit color, 384×1152 BMP on SD card) and **analog MAX7456** (2-bit monochrome, .mcm flashed via Configurator's Font Manager). Pilots toggle between modes and the whole UI adapts — theme, dimensions, file formats, install flow. Built on top of the conceptual groundwork from the Python-based `HD-OSD-Font-Tools`, reimplemented in TypeScript with a WYSIWYG glyph atlas, TTF palette rendering, PNG glyph overrides, live simulated OSD preview with drag-positioned elements over FPV backgrounds, and end-to-end project persistence.
 
-## 1.5 Status (as of v0.3.2)
+## 1.5 Status (as of v0.3.3)
 
 **Shipped and stable:**
 
@@ -16,8 +16,9 @@ hdzero-osd-lab is a purely client-side, browser-based studio for designing OSD f
 - ✅ Phase 3 (v0.3.0) — Analog (MAX7456) mode with full dual-target support, phosphor-CRT theme swap, MCM encoder, mode-isolated project state, mode-aware everything.
 - ✅ v0.3.1 — In-browser pixel editor for single glyphs (from the Inspector) and mini-logos (from Decoration). Pencil / eraser / fill / eyedropper, HSL shade row + presets in HD, three-state palette in analog. Saves through the existing glyph-override / logo-layer pipeline.
 - ✅ v0.3.2 — 23-issue polish pass driven by 6 parallel codebase audits. Closed several mode-switch race conditions, added a persistent error banner for storage failures (private browsing, quota, autosave), modal focus trap + aria-labels for the pixel editor, inline errors throughout (replacing OS dialogs), runtime shape validation on JSON/IDB reads.
+- ✅ v0.3.3 — Stabilized TTF palette layers (per-glyph random colors no longer reshuffle on FPV background swap, OSD drag, or tab switch) via per-layer `paletteSeed` + rasterization cache. Shipped a swatch-based palette editor with `↻ reroll`, and made the Edit TTF form live-preview every field (size, outline, stretch, colors, file replace) with single-undo-entry session semantics (Save commits, Cancel rolls back).
 
-**Planned next:** small follow-ups (HDZero font library browser, palette seed control, analog sample fonts) plus larger Phase 4 items (zip import/export, URL-fragment sharing, a11y completeness). See "Planned next" under Phase 4 below — no monolithic v1.0 milestone, items ship when worth shipping.
+**Planned next:** small follow-ups (HDZero font library browser, analog sample fonts) plus larger Phase 4 items (zip import/export, URL-fragment sharing, a11y completeness). See "Planned next" under Phase 4 below — no monolithic v1.0 milestone, items ship when worth shipping.
 
 ## 2. Non-Goals
 

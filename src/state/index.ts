@@ -4,6 +4,10 @@ export * from "./project";
 export {
   project,
   mutate,
+  mutateLive,
+  beginEditSession,
+  commitEditSession,
+  rollbackEditSession,
   replaceProject,
   undo,
   redo,

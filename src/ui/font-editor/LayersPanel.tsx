@@ -16,7 +16,8 @@ import { BitmapLayerForm } from "./BitmapLayerForm";
 import { McmLayerForm } from "./McmLayerForm";
 import { ModeToggle } from "@/ui/shared/ModeToggle";
 import { useResolvedAssets } from "@/ui/hooks/useResolvedAssets";
-import type { BitmapLayer, McmLayer } from "@/state/project";
+import { newPaletteSeed } from "@/state/project";
+import type { BitmapLayer, McmLayer, TtfLayer } from "@/state/project";
 
 export function LayersPanel() {
   const layers = useComputed(() => project.value.font.layers);
@@ -114,6 +115,14 @@ export function LayersPanel() {
       const next = doc.font.layers[idx + 1]!;
       doc.font.layers[idx + 1] = doc.font.layers[idx]!;
       doc.font.layers[idx] = next;
+    });
+  };
+
+  /** Reroll a TTF layer's palette seed. No-op for layers that don't use a palette. */
+  const rerollPalette = (id: string) => {
+    mutate((doc) => {
+      const l = doc.font.layers.find((x) => x.id === id);
+      if (l && l.kind === "ttf") l.paletteSeed = newPaletteSeed();
     });
   };
 
@@ -331,6 +340,17 @@ export function LayersPanel() {
                       ▼
                     </Button>
                   </div>
+                  {layer.kind === "ttf" && ttfUsesPalette(layer) && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => rerollPalette(layer.id)}
+                      aria-label="Reroll palette colors"
+                      class="!px-2 !py-1 !text-osd-mint"
+                      title="Reroll — randomize which glyphs get which colors"
+                    >
+                      ↻
+                    </Button>
+                  )}
                   {(layer.kind === "ttf" ||
                     layer.kind === "bitmap" ||
                     layer.kind === "mcm") && (
@@ -415,6 +435,13 @@ export function LayersPanel() {
       </section>
     </aside>
   );
+}
+
+/** A TTF layer "uses a palette" when either color is a list with ≥ 2 entries. */
+function ttfUsesPalette(layer: TtfLayer): boolean {
+  const gp = Array.isArray(layer.glyphColor) && layer.glyphColor.length >= 2;
+  const op = Array.isArray(layer.outlineColor) && layer.outlineColor.length >= 2;
+  return gp || op;
 }
 
 interface SampleFontEntry {

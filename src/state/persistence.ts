@@ -4,7 +4,7 @@
 // the destination system also has those hashes available (or can re-upload).
 
 import type { ProjectDoc } from "./project";
-import { CURRENT_SCHEMA_VERSION } from "./project";
+import { CURRENT_SCHEMA_VERSION, newPaletteSeed } from "./project";
 
 /** Pretty-printed JSON suitable for a file download. */
 export function projectToJson(doc: ProjectDoc): string {
@@ -67,6 +67,25 @@ export function projectFromJson(json: string): ProjectDoc {
     throw new Error(
       `projectFromJson: meta.mode is "${String(parsed.meta.mode)}", expected "hd" or "analog"`,
     );
+  }
+  // Auto-migrate: TTF layers saved before per-layer paletteSeed existed.
+  // Without a seed the rasterizer reshuffles palette picks every time the
+  // resolver re-runs (tab switch, bg change, any doc mutation). Assigning a
+  // seed now pins those picks.
+  for (const layer of parsed.font.layers) {
+    if (isRecord(layer) && layer.kind === "ttf" && layer.paletteSeed === undefined) {
+      layer.paletteSeed = newPaletteSeed();
+    }
+  }
+  if (isRecord(parsed.fontArchive)) {
+    for (const slot of Object.values(parsed.fontArchive)) {
+      if (!isRecord(slot) || !Array.isArray(slot.layers)) continue;
+      for (const layer of slot.layers) {
+        if (isRecord(layer) && layer.kind === "ttf" && layer.paletteSeed === undefined) {
+          layer.paletteSeed = newPaletteSeed();
+        }
+      }
+    }
   }
   return parsed as unknown as ProjectDoc;
 }

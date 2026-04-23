@@ -23,7 +23,7 @@ import {
   emptyResolvedAssets,
   type ResolvedAssets,
 } from "@/compositor/compose";
-import type { RgbaImage } from "@/compositor/types";
+import type { RgbaImage, TileMap } from "@/compositor/types";
 import type { ProjectDoc, TtfLayer } from "@/state/project";
 
 export interface ResolvedAssetsState {
@@ -151,6 +151,47 @@ async function loadBitmapLayers(
 }
 
 /**
+ * TTF rasterization is expensive and its output is a pure function of its
+ * inputs. Without a cache, every project mutation (drag an OSD element,
+ * change the background image, switch tabs and re-mount this hook) would
+ * re-run the loader and re-rasterize every layer. For palette layers that
+ * also means a fresh Math.random stream → glyphs shuffle to new colors on
+ * every redraw. The cache keys tiles on a stable fingerprint of all
+ * rasterization inputs so:
+ *   - Unchanged layer → same TileMap reference, colors stay put.
+ *   - Layer edited or paletteSeed rerolled → cache miss, fresh rasterize.
+ */
+const ttfTileCache = new Map<string, TileMap>();
+
+export function ttfCacheKey(
+  layer: TtfLayer,
+  seed: number | null,
+  targetSize: { w: number; h: number },
+): string {
+  const sourceKey =
+    layer.source.kind === "user"
+      ? `u:${layer.source.hash}`
+      : `b:${layer.source.id}`;
+  return JSON.stringify([
+    layer.id,
+    sourceKey,
+    layer.subset,
+    layer.size,
+    layer.outlineThickness,
+    layer.vStretch,
+    layer.glyphOffset,
+    layer.outlineOffset,
+    layer.glyphColor,
+    layer.outlineColor,
+    layer.superSampling,
+    layer.paletteSeed ?? null,
+    seed,
+    targetSize.w,
+    targetSize.h,
+  ]);
+}
+
+/**
  * Rasterize every enabled TTF layer. Each layer produces its own TileMap
  * keyed by layer.id (not asset hash) since two layers can share a TTF but
  * render with different sizes / colors / subsets.
@@ -160,23 +201,49 @@ async function loadTtfLayers(
   out: ResolvedAssets,
   errs: Record<string, string>,
 ): Promise<void> {
+  const seed = doc.meta.rngSeed;
+  const targetSize = doc.meta.mode === "analog" ? ANALOG_GLYPH_SIZE : GLYPH_SIZE;
+
+  // Build the set of cache keys the current doc references so we can GC
+  // entries for layers that were removed / had their params changed. We walk
+  // ALL ttf layers (enabled or not) so that toggling a layer off-then-on
+  // doesn't invalidate its cached palette picks.
+  const liveKeys = new Set<string>();
+  for (const layer of doc.font.layers) {
+    if (layer.kind !== "ttf") continue;
+    liveKeys.add(ttfCacheKey(layer, seed, targetSize));
+  }
+
   for (const layer of doc.font.layers) {
     if (layer.kind !== "ttf") continue;
     if (!layer.enabled) continue;
     if (layer.source.kind !== "user") continue;
+
+    const key = ttfCacheKey(layer, seed, targetSize);
+    const cached = ttfTileCache.get(key);
+    if (cached) {
+      out.ttf.set(layer.id, cached);
+      continue;
+    }
+
     const rec = await getAsset(layer.source.hash);
     if (!rec) {
       errs[layer.id] = "asset not found in IndexedDB";
       continue;
     }
     try {
-      const tiles = await rasterizeOneTtfLayer(layer, rec.bytes);
+      const tiles = await rasterizeOneTtfLayer(layer, rec.bytes, seed, targetSize);
+      ttfTileCache.set(key, tiles);
       out.ttf.set(layer.id, tiles);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       errs[layer.id] = msg;
       console.error(`TTF layer "${layer.id}" failed to rasterize:`, err);
     }
+  }
+
+  for (const k of ttfTileCache.keys()) {
+    if (!liveKeys.has(k)) ttfTileCache.delete(k);
   }
 }
 
@@ -324,14 +391,17 @@ async function scaleImageToLogoSlot(
 async function rasterizeOneTtfLayer(
   layer: TtfLayer,
   bytes: ArrayBuffer,
-): Promise<import("@/compositor/types").TileMap> {
+  docSeed: number | null,
+  targetSize: { w: number; h: number },
+): Promise<TileMap> {
   const codes = GLYPH_SUBSETS[layer.subset];
-  const seed = project.value.meta.rngSeed;
-  // Render at mode-appropriate tile resolution so analog mode gets native
-  // 12×18 tiles instead of HD 24×36 ones. Most regular TTFs look chunky at
-  // 12×18; pixel-designed fonts (PixelOperator, Press Start 2P, etc.) read
-  // cleanly. The form's help text sets that expectation.
-  const targetSize = project.value.meta.mode === "analog" ? ANALOG_GLYPH_SIZE : GLYPH_SIZE;
+  // Prefer the layer's own paletteSeed when present. This keeps palette picks
+  // stable per-layer and lets the reroll button refresh just one layer without
+  // dragging the rest of the project along. Falls back to the doc-level
+  // rngSeed (null = Math.random) for older projects that haven't had the
+  // migration run yet — in practice every persisted layer picks up a seed on
+  // load (see projectFromJson).
+  const seed = layer.paletteSeed ?? docSeed;
   return rasterizeTtfSubset(bytes, {
     codes,
     size: layer.size,

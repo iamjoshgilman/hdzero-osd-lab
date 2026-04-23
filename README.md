@@ -54,13 +54,13 @@ Full walkthroughs (with troubleshooting) live in the in-app How-To tab.
 
 ## Status
 
-Current release **v0.3.2**. Both HDZero and analog Betaflight targets are first-class (Phase 3, v0.3.0). v0.3.1 added an in-browser pixel editor for single glyphs and mini-logos. v0.3.2 was an audit-driven polish pass — race-condition fixes, persistent error banner for storage failures, modal focus trap + aria-labels, runtime shape validation on JSON / IndexedDB reads, inline errors throughout (no more `alert()` dialogs).
+Current release **v0.3.3**. Both HDZero and analog Betaflight targets are first-class (Phase 3, v0.3.0). v0.3.1 added an in-browser pixel editor for single glyphs and mini-logos. v0.3.2 was an audit-driven polish pass — race-condition fixes, persistent error banner for storage failures, modal focus trap + aria-labels, runtime shape validation on JSON / IndexedDB reads, inline errors throughout (no more `alert()` dialogs). v0.3.3 stabilizes TTF palette layers (per-glyph random colors no longer reshuffle on background or tab changes), ships a swatch-based palette editor with a `↻ reroll` button, and makes the Edit TTF form live-preview every field while you dial it in.
 
 Earlier phases delivered the HD compositor, live OSD preview with drag-to-position, and the full Phase 2.x polish queue (logo uploader, per-glyph tints, realism toggle, project persistence, How-To tab, MCM workflow).
 
 See [CHANGELOG.md](CHANGELOG.md) for the per-release detail and [PLAN.md](PLAN.md) for the roadmap ahead.
 
-Next on the list: project bundle `.zip` import/export, URL-shareable builds, HDZero font library browser, palette seed control, a11y completeness.
+Next on the list: project bundle `.zip` import/export, URL-shareable builds, HDZero font library browser, a11y completeness.
 
 ## Tech stack
 

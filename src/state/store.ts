@@ -29,6 +29,44 @@ export function mutate(fn: (draft: ProjectDoc) => void): void {
   project.value = next;
 }
 
+/**
+ * Apply a mutation WITHOUT pushing to the undo stack. For live-edit sessions
+ * where each keystroke / slider tick updates the doc — pushing every
+ * intermediate state onto undo would make a single edit session take 50
+ * undos to rewind. Callers should pair this with beginEditSession +
+ * commitEditSession so the session collapses to a single undo entry.
+ *
+ * Safe to use outside a session, but only when the mutation is semantically
+ * trivial (e.g. an in-flight drag). Anything durable should go through
+ * `mutate()` instead.
+ */
+export function mutateLive(fn: (draft: ProjectDoc) => void): void {
+  const next = structuredClone(project.value);
+  fn(next);
+  next.meta.updatedAt = new Date().toISOString();
+  project.value = next;
+}
+
+/**
+ * Capture a snapshot to anchor a live-edit session. Call on editor open, then
+ * run all in-session edits through `mutateLive`. End the session with either
+ * `commitEditSession(snapshot)` (Save — one undo entry) or
+ * `rollbackEditSession(snapshot)` (Cancel — restore, no undo entry).
+ */
+export function beginEditSession(): ProjectDoc {
+  return structuredClone(project.value);
+}
+
+/** Push the pre-session snapshot onto the undo stack. One undo undoes the session. */
+export function commitEditSession(snapshot: ProjectDoc): void {
+  history.push(snapshot);
+}
+
+/** Restore the pre-session snapshot without touching the undo stack. */
+export function rollbackEditSession(snapshot: ProjectDoc): void {
+  project.value = snapshot;
+}
+
 /** Replace the whole document (e.g. on file import). Pushes onto undo stack. */
 export function replaceProject(doc: ProjectDoc): void {
   history.push(project.value);

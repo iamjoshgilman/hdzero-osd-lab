@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-04-23 — Stable palette colors + live-edit TTF form
+
+Fixes a reported bug where TTF palette layers reshuffled their per-glyph colors on every unrelated action (changing the FPV background, dragging an OSD element, switching tabs). Also makes the TTF layer editor live-preview every field while you dial it in, instead of forcing a Save-and-reopen cycle per tweak.
+
+### Fixed — palette colors no longer reshuffle
+
+- **TTF palette layers reshuffled on every project mutation.** Root cause: `useResolvedAssets` subscribes to the whole project signal, so any mutation (FPV background swap, OSD element drag, tab re-mount) triggered a full re-resolve. Inside that, `rasterizeOneTtfLayer` called `createRng(meta.rngSeed)`; with the default `rngSeed: null` that returned raw `Math.random`, so palette layers picked fresh per-glyph colors every time. Symptom: "every tab switch reloads the font/colors."
+- **Fix 1 — per-layer `paletteSeed`.** New optional `paletteSeed: number` on `TtfLayer`, auto-assigned on layer creation and migrated onto older layers + archived-mode layers on load (`projectFromJson`). The rasterizer now uses the layer's own seed, so one layer's palette is independent of the doc-level seed and of other layers.
+- **Fix 2 — cache TTF rasterization.** Added a module-level `ttfTileCache` in `useResolvedAssets` keyed on a stable fingerprint of all rasterizer inputs (source hash, subset, size, outline, stretch, offsets, colors, supersampling, paletteSeed, doc seed, target size). Cache hit → reuse `TileMap` reference, palette picks stay put. Miss → rasterize fresh (on layer edit or reroll). Cache GC's entries whose layer no longer exists; walks all layers (not just enabled) so toggling a layer off/on doesn't reshuffle.
+
+### Added — user-facing palette controls
+
+- **Swatch palette editor** in `TtfLayerForm` replaces the bare comma-separated hex text field for both Glyph color and Outline color. Each swatch is a native `<input type="color">` styled as a flat square (7×7 with CSS resets on `::-webkit-color-swatch` and `::-moz-color-swatch`); hover reveals a × badge to remove; trailing `+` adds a new swatch, capped at 8. Single swatch = solid color mode; two or more = palette mode. Raw comma-separated hex input is preserved under a collapsed `<details>` toggle for power-users / paste flows; both views stay in sync.
+- **`↻ reroll` button** inside the form, shown next to the Glyph color label when the swatches form a palette (≥ 2 colors). Click rerolls just this layer's `paletteSeed` — palette picks change, other layers untouched. Also a standalone `↻` icon in each TTF layer's row in the Layers panel (next to the ✎ edit pencil), visible only when the layer uses a palette, so rerolling doesn't require opening the editor.
+- **WhiteRqbbit preset button** now populates the four-swatch editor in one click.
+
+### Added — live-edit TTF layer form
+
+- **Every field in the Edit TTF form now live-previews.** Changing Size, Outline, V-Stretch, Target subset, Glyph/Outline colors (swatch picker or raw hex), or replacing the font file updates the composed preview as you tweak. No more Save → reopen → Save loop to dial in outline thickness.
+- **New store primitives to support this without spamming the undo stack:** `mutateLive(fn)` writes to the project without pushing onto undo; `beginEditSession()` captures a pre-session snapshot; `commitEditSession(snap)` pushes that snapshot as a single undo entry; `rollbackEditSession(snap)` restores it without creating an undo entry.
+- **Edit-session lifecycle in `TtfLayerForm`:** on mount (editing mode only) snapshots via `useEffect`; every setter writes through `mutateLive`; **Save changes** commits the session (one undo rewinds the whole dial-in); **Cancel** / the header "close" link both roll back to the pre-edit snapshot with no undo residue; unmounting without explicit Save/Cancel (e.g. clicking another layer's edit pencil) auto-commits — the user's visible state sticks as one undo entry. New-layer flow is unchanged: still a single `mutate()` on "Add layer".
+
+### Changed — icon glyph
+
+- Replaced `⚅` (die face) with `↻` (clockwise refresh arrow) for the reroll buttons — the die dots read as visual noise at 12–14px; the arrow glyph says "re-do" unambiguously at small sizes. In-form button is labelled "↻ reroll"; in-row button is a standalone `↻` tinted mint for pop against the secondary-button fill.
+
+### Fixed — swatch picker UX
+
+- **Native color picker closed mid-interaction on every color change.** Each `SwatchCell` used `key={`${i}-${hex}`}`, so when the picker emitted a new color the key changed and the input was unmounted+remounted — closing the dialog. Keyed on position only now (`key={i}`), input DOM stays stable across re-renders.
+- **Drag/select ambiguity on the label-wrapped hidden input pattern.** Replaced with a directly-styled `<input type="color">` as the swatch. Fewer event handlers, no label click semantics, `draggable={false}` + `select-none` for belt-and-braces against stray drags.
+- **Controlled-value churn during picker drag** — switched `onInput` → `onChange` so state only updates on picker commit, not on every in-dialog slider tick.
+
+### Tests
+
+- 216 tests, all green (was 201). Added coverage for:
+  - `ttfCacheKey` fingerprint: stable under `enabled` toggle; changes on `paletteSeed`, palette swap, target size (HD ↔ analog), source hash, size/outline/stretch/offset, layer id; doc seed still folded in for layers missing `paletteSeed`.
+  - Migration: older TTF layers (both in `font.layers` and in `fontArchive.<mode>.layers`) get a `paletteSeed` assigned on `projectFromJson`.
+  - Live-edit store primitives: `mutateLive` doesn't push onto undo; `commitEditSession` collapses N live writes into one undo entry; `rollbackEditSession` restores cleanly with no undo residue; a 10-tick session commits to exactly 1 undo entry (not 10).
+
+### Bumped
+
+- `package.json` version `0.3.2` → `0.3.3`.
+
 ## [0.3.2] - 2026-04-23 — Polish pass: races, a11y, error surfaces
 
 A bug-hunt + polish release driven by six parallel codebase audits (dead code, mode-switch bugs, perf hotspots, a11y, UX consistency, data integrity, type safety, resource cleanup). 23 issues fixed in one batch; no new features.

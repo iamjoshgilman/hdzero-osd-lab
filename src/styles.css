@@ -91,3 +91,30 @@ body {
     system-ui,
     sans-serif;
 }
+
+/*
+ * Style the native <input type="color"> so it behaves as a flat swatch in
+ * the TTF palette editor. Without these resets browsers render it with a
+ * thick internal bezel that breaks the "row of small colored squares" layout
+ * we want. Using the input directly (instead of a label wrapping a hidden
+ * input) keeps the native color picker attached to a stable DOM node across
+ * re-renders — previously each picker change swapped the element's key and
+ * remounted the input, which closed the picker mid-interaction.
+ */
+input[type="color"].swatch-input {
+  padding: 0;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  background: transparent;
+}
+input[type="color"].swatch-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+input[type="color"].swatch-input::-webkit-color-swatch {
+  border: none;
+  border-radius: 0.25rem;
+}
+input[type="color"].swatch-input::-moz-color-swatch {
+  border: none;
+  border-radius: 0.25rem;
+}

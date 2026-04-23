@@ -61,4 +61,71 @@ describe("projectToJson / projectFromJson", () => {
     const back = projectFromJson(legacyJson);
     expect(back.meta.mode).toBe("hd");
   });
+
+  it("assigns paletteSeed to TTF layers that predate the field", () => {
+    // Pre-paletteSeed projects had no per-layer seed. The resolver used to
+    // fall back to Math.random, reshuffling colors on every rerender. The
+    // migration pins a seed on load so colors are stable from the first
+    // paint.
+    const p = createDefaultProject();
+    p.font.layers.push({
+      id: "ttf-old",
+      kind: "ttf",
+      source: { kind: "user", hash: "a".repeat(64), name: "f.ttf", mime: "font/ttf" },
+      subset: "BTFL_LETTERS",
+      size: 22,
+      outlineThickness: 1,
+      vStretch: 1,
+      glyphOffset: { x: 0, y: 0 },
+      outlineOffset: { x: 0, y: 0 },
+      glyphColor: ["#ff0000", "#00ff00", "#0000ff"],
+      outlineColor: "#000000",
+      superSampling: 8,
+      enabled: true,
+    });
+    const json = projectToJson(p);
+    const parsed = JSON.parse(json) as { font: { layers: Array<Record<string, unknown>> } };
+    delete parsed.font.layers[0]!.paletteSeed;
+    const legacyJson = JSON.stringify(parsed);
+    const back = projectFromJson(legacyJson);
+    const migrated = back.font.layers[0]!;
+    if (migrated.kind !== "ttf") throw new Error("expected ttf layer");
+    expect(typeof migrated.paletteSeed).toBe("number");
+    expect(Number.isFinite(migrated.paletteSeed)).toBe(true);
+  });
+
+  it("migrates TTF layers inside fontArchive slots too", () => {
+    const p = createDefaultProject();
+    p.fontArchive = {
+      analog: {
+        layers: [
+          {
+            id: "ttf-archived",
+            kind: "ttf",
+            source: { kind: "user", hash: "b".repeat(64), name: "g.ttf", mime: "font/ttf" },
+            subset: "BTFL_LETTERS",
+            size: 18,
+            outlineThickness: 1,
+            vStretch: 1,
+            glyphOffset: { x: 0, y: 0 },
+            outlineOffset: { x: 0, y: 0 },
+            glyphColor: "#ffffff",
+            outlineColor: "#000000",
+            superSampling: 8,
+            enabled: true,
+          },
+        ],
+        overrides: {},
+      },
+    };
+    const json = projectToJson(p);
+    const parsed = JSON.parse(json) as {
+      fontArchive: { analog: { layers: Array<Record<string, unknown>> } };
+    };
+    delete parsed.fontArchive.analog.layers[0]!.paletteSeed;
+    const back = projectFromJson(JSON.stringify(parsed));
+    const archived = back.fontArchive!.analog!.layers[0]!;
+    if (archived.kind !== "ttf") throw new Error("expected ttf layer");
+    expect(typeof archived.paletteSeed).toBe("number");
+  });
 });

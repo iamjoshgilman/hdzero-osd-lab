@@ -180,7 +180,18 @@ export interface TtfLayer {
   outlineColor: HexColor | HexColor[];
   /** Supersampling factor passed to the rasterizer. fontbuilder.py default=8. */
   superSampling: number;
+  /**
+   * Per-layer seed driving palette picks. Stable so tiles don't re-shuffle
+   * on every tab switch / unrelated doc mutation. Reroll button regenerates
+   * this; older projects get one assigned on load.
+   */
+  paletteSeed?: number;
   enabled: boolean;
+}
+
+/** Generate a fresh 32-bit palette seed. */
+export function newPaletteSeed(): number {
+  return (Math.random() * 0x1_0000_0000) | 0;
 }
 
 export interface LogoLayer {

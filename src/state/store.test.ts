@@ -2,6 +2,10 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   project,
   mutate,
+  mutateLive,
+  beginEditSession,
+  commitEditSession,
+  rollbackEditSession,
   undo,
   redo,
   canUndo,
@@ -90,6 +94,67 @@ describe("store", () => {
     expect(canUndo()).toBe(true);
     resetStore();
     expect(canUndo()).toBe(false);
+    expect(project.value.meta.name).toBe("Untitled");
+  });
+
+  it("mutateLive applies the change but does not push onto undo", () => {
+    expect(canUndo()).toBe(false);
+    mutateLive((d) => {
+      d.meta.name = "live";
+    });
+    expect(project.value.meta.name).toBe("live");
+    expect(canUndo()).toBe(false);
+  });
+
+  it("commitEditSession pushes the pre-session snapshot so one undo rewinds everything", () => {
+    // Baseline: three live tweaks simulating a dial-in session.
+    const snapshot = beginEditSession();
+    mutateLive((d) => {
+      d.meta.name = "step 1";
+    });
+    mutateLive((d) => {
+      d.meta.name = "step 2";
+    });
+    mutateLive((d) => {
+      d.meta.name = "step 3";
+    });
+    expect(canUndo()).toBe(false); // no undo entries yet
+    commitEditSession(snapshot);
+    expect(canUndo()).toBe(true);
+    // A single undo should rewind the ENTIRE session, not just the last step.
+    undo();
+    expect(project.value.meta.name).toBe("Untitled");
+  });
+
+  it("rollbackEditSession restores the snapshot without creating an undo entry", () => {
+    const snapshot = beginEditSession();
+    mutateLive((d) => {
+      d.meta.name = "in-flight";
+    });
+    expect(project.value.meta.name).toBe("in-flight");
+    rollbackEditSession(snapshot);
+    expect(project.value.meta.name).toBe("Untitled");
+    expect(canUndo()).toBe(false);
+  });
+
+  it("a live-edit session does not pollute the undo stack with intermediate entries", () => {
+    mutate((d) => {
+      d.meta.name = "before session";
+    });
+    expect(canUndo()).toBe(true);
+    const snapshot = beginEditSession();
+    // 10 live tweaks — would be 10 undo entries under mutate().
+    for (let i = 0; i < 10; i++) {
+      mutateLive((d) => {
+        d.meta.name = `tick ${i}`;
+      });
+    }
+    commitEditSession(snapshot);
+    // One undo rewinds the whole session to "before session". A second undo
+    // rewinds that mutation to the default "Untitled". Total: 2 undos.
+    undo();
+    expect(project.value.meta.name).toBe("before session");
+    undo();
     expect(project.value.meta.name).toBe("Untitled");
   });
 });

@@ -175,16 +175,22 @@ async function loadTtfLayers(
  * colored differently per layer — the parser bakes the ink colors into the
  * output tiles.
  *
- * HD mode uses parseMcm (2× upscaled to 24×36 HD tiles). Analog mode uses
- * parseMcmNative (native 12×18, no upscale). The mode is decided here so
- * compose() downstream just receives tiles at the right resolution.
+ * HD mode uses parseMcm (2× upscaled to 24×36 HD tiles) with the layer's
+ * stored glyph/outline colors. Analog mode uses parseMcmNative (native
+ * 12×18) and FORCES pure white / pure black regardless of what the layer
+ * stored — the MAX7456 chip renders only three states, and any soft-white
+ * like HD's `#E0E0E0` default would show up in the preview as a middle
+ * grey that gets flattened to pure white on MCM export anyway. Forcing
+ * pure colors here keeps the preview truthful. The layer's HD colors are
+ * preserved in the stored state for when the user flips back to HD mode.
  */
 async function loadMcmLayers(
   doc: ProjectDoc,
   out: ResolvedAssets,
   errs: Record<string, string>,
 ): Promise<void> {
-  const parse = doc.meta.mode === "analog" ? parseMcmNative : parseMcm;
+  const isAnalog = doc.meta.mode === "analog";
+  const parse = isAnalog ? parseMcmNative : parseMcm;
   for (const layer of doc.font.layers) {
     if (layer.kind !== "mcm") continue;
     if (!layer.enabled) continue;
@@ -197,8 +203,8 @@ async function loadMcmLayers(
     try {
       const text = new TextDecoder().decode(rec.bytes);
       const tiles = parse(text, {
-        glyphColor: layer.glyphColor,
-        outlineColor: layer.outlineColor,
+        glyphColor: isAnalog ? "#ffffff" : layer.glyphColor,
+        outlineColor: isAnalog ? "#000000" : layer.outlineColor,
       });
       if (tiles.size === 0) {
         errs[layer.id] =

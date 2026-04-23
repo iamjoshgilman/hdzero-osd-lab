@@ -51,7 +51,11 @@ export function LayersPanel() {
           kind: "mcm",
           source: { kind: "user", hash, name: file.name, mime: file.type || "text/plain" },
           subset: "ALL",
-          glyphColor: "#E0E0E0",
+          // Analog locks to pure white/black (2-bit chip can't render
+          // anything else — the render path forces it anyway, but we set
+          // the stored value to match so it doesn't look "off" if the
+          // user later edits the layer).
+          glyphColor: mode.value === "analog" ? "#ffffff" : "#E0E0E0",
           outlineColor: "#000000",
           enabled: true,
         };

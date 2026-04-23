@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-04-22 — In-browser pixel editor
+
+### Added — Pixel editor
+
+The tool can now draw glyphs and mini-logos directly in the browser, not just compose/upload them. Closes the biggest outstanding capability gap from the Phase 4 roadmap.
+
+**Editor component** (`src/ui/pixel-editor/PixelEditor.tsx`):
+
+- Modal popup sized to a fixed `min(90vw, 1200px) × min(90vh, 800px)` — dragging the zoom slider scrolls the canvas internally instead of resizing the popup.
+- Tools: pencil, eraser (→ chroma-gray), flood fill (BFS, 4-way connected), eyedropper. Click or click-drag to paint; Bresenham line connects sweep samples so fast drags don't leave pixel gaps.
+- Undo / redo (editor-scoped, 50-step history), clear-all, grid toggle.
+- Zoom slider 1–32× with mode-aware defaults: single-tile glyphs default to 8–16× (paintable out of the box), multi-tile mini-logos default to ~5×.
+- Render uses ImageData + drawImage with `imageSmoothingEnabled=false` — fast at any canvas size.
+
+**HD-mode palette:**
+
+- Free-form 24-bit color picker (native `<input type="color">` + hex text input)
+- "Transparent (chroma-gray)" shortcut
+- **Presets row**: 6 curated OSD-friendly colors (white, black, alert red, OK green, amber, cyan)
+- **Shade row**: 5 swatches showing the current color at −40% / −20% / 0% / +20% / +40% lightness (HSL-preserving, so shadows stay in-family). One-click to adopt a variant — great for shadow/highlight workflow.
+- Recent-colors strip (last 8 used)
+
+**Analog-mode palette:**
+
+- Three fixed buttons (white / black / transparent). MAX7456 can't render anything else; showing a full picker here would mislead the preview.
+
+**Preview thumbnail** in the toolbar: scale-to-fit (aspect-preserved), chroma-gray rendered as slate-950 sky so it simulates how the chip composites transparency over video.
+
+**Integration points:**
+
+- `Glyph Inspector` — new `✎ Draw this glyph` button seeds the editor from the current composed tile. Save → PNG-encode → `putAsset` → glyph override at the selected code (same pipeline as drag-and-drop PNG overrides).
+- `Decoration tab, mini-logo slot` — `✎ Draw from scratch` (empty slot) / `✎ Draw` (replace existing). Save → PNG-encode → logo layer. The `✎ Draw` path is intentionally **not** offered for the 576×144 BTFL banner — at that scale the UX needs proper pan/zoom/selection and image upload is already solid. Small-scale editing (glyph + mini-logo) is where in-browser drawing shines.
+
+**Pure primitives** (`src/ui/pixel-editor/pixel-ops.ts`, 19 new tests):
+
+- `getPixel` / `setPixel` / `erasePixel`
+- `floodFill` — BFS 4-way, no-op when target matches new color
+- `drawLine` — Bresenham for click-drag continuity
+- `clonePixels` — undo snapshot helper
+- `parseHexRgb` / `rgbToHex`
+- `rgbToHsl` / `hslToRgb` (hue-preserving shade math)
+- `shadeColor` — lightness shift clamped at extremes
+- `rgbToPngBlob` — PNG encode via OffscreenCanvas for the save pipeline
+
+### Fixed
+
+- **Glyph Inspector tile preview was HD-only.** Used `extractTile` and `GLYPH_SIZE` unconditionally, so analog-mode previews were reading HD coordinates out of an analog 192×288 atlas — garbage pixels. Now branches on `project.meta.mode` and uses `extractAnalogTile` + `ANALOG_GLYPH_SIZE` in analog, with 8× display zoom vs HD's 4× (same on-screen footprint, double source density).
+- **MCM layers rendered as soft grey in analog mode.** The HD-default glyph color `#E0E0E0` isn't pure white, so "glyph fill" pixels in analog-mode preview showed as a middle grey that got flattened to pure white on MCM export — preview was lying. `useResolvedAssets` now forces `#ffffff` / `#000000` for MCM layers when `project.meta.mode === "analog"` regardless of what the layer stored. HD colors preserved for HD-mode renders. `addBaseFont` in LayersPanel also picks pure white when the base-drop is used in analog mode so new layers start with correct defaults.
+
+### Tests
+
+- 182 → 201 (+19 pixel-ops cases).
+
+### Bumped
+
+- `package.json` version `0.3.0` → `0.3.1`.
+
 ## [0.3.0] - 2026-04-22 — Phase 3 "Analog mode" complete
 
 ### Added — Analog (MAX7456) mode

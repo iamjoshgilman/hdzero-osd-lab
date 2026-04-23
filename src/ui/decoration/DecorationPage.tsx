@@ -5,10 +5,15 @@
 // banner; analog doesn't, so pilots trigger via Craft Name / Warnings).
 
 import { useComputed } from "@preact/signals";
+import { useState } from "preact/hooks";
 import { project, mutate } from "@/state/store";
 import { putAsset } from "@/state/assets";
 import { FileDrop } from "@/ui/shared/FileDrop";
 import { Button } from "@/ui/shared/Button";
+import { PixelEditor } from "@/ui/pixel-editor/PixelEditor";
+import { rgbToPngBlob } from "@/ui/pixel-editor/pixel-ops";
+import { useResolvedAssets } from "@/ui/hooks/useResolvedAssets";
+import { ANALOG_GLYPH_SIZE, GLYPH_SIZE } from "@/compositor/constants";
 import type { LogoLayer, OsdMode } from "@/state/project";
 
 interface LogoSlotSpec {
@@ -18,6 +23,14 @@ interface LogoSlotSpec {
   dims: Record<OsdMode, { w: number; h: number }>;
   renderedAt: Record<OsdMode, string>;
   purpose: string;
+  /**
+   * Whether the in-browser pixel editor gets offered for this slot. BTFL
+   * banner is 576×144 (or 288×72 analog) — legitimately too big to draw
+   * pixel-by-pixel in-browser without proper zoom/pan/selection UX. Image
+   * upload covers it well. Mini-logo at 120×36 / 60×18 is small enough
+   * that in-browser drawing is practical.
+   */
+  drawable: boolean;
 }
 
 // INAV logo slot is supported by the compositor (LogoLayer kind="inav") and
@@ -40,6 +53,7 @@ const LOGO_SLOTS: readonly LogoSlotSpec[] = [
     },
     purpose:
       "The big BETAFLIGHT-style banner. 96 tiles wrapped into glyph codes 160..255. HD firmware auto-draws via SYM_LOGO; analog pilots trigger display manually via Craft Name / Warnings.",
+    drawable: false,
   },
   {
     slot: "mini",
@@ -54,6 +68,7 @@ const LOGO_SLOTS: readonly LogoSlotSpec[] = [
     },
     purpose:
       "A 5-tile inline logo (glyph codes 91..95). Render it in flight by setting your Betaflight Craft Name to the five characters `[\\]^_`. Works the same on HD and analog.",
+    drawable: true,
   },
 ];
 
@@ -95,6 +110,59 @@ async function uploadOrReplaceLogo(
     };
     doc.font.layers.push(layer);
   });
+}
+
+/**
+ * Save a drawn logo image as an asset + replace the slot's layer. Same
+ * destination as a file upload — goes through the compositor's existing
+ * Z-wrap logic at compose time, so the user-facing canvas is "normal" and
+ * the tile splitting stays invisible.
+ */
+async function saveDrawnLogo(
+  slot: LogoLayer["slot"],
+  pixels: Uint8ClampedArray,
+  w: number,
+  h: number,
+): Promise<void> {
+  const blob = await rgbToPngBlob(pixels, w, h);
+  const buf = await blob.arrayBuffer();
+  const name = `drawn-${slot}-${Date.now()}.png`;
+  const hash = await putAsset(buf, { name, mime: "image/png" });
+  mutate((doc) => {
+    doc.font.layers = doc.font.layers.filter(
+      (l) => !(l.kind === "logo" && l.slot === slot),
+    );
+    const layer: LogoLayer = {
+      id: `logo-${slot}-${Date.now()}`,
+      kind: "logo",
+      source: { kind: "user", hash, name, mime: "image/png" },
+      slot,
+      enabled: true,
+    };
+    doc.font.layers.push(layer);
+  });
+}
+
+/** Blank chroma-gray RGB buffer at the given slot dimensions. */
+function blankSlotPixels(w: number, h: number): Uint8ClampedArray {
+  const buf = new Uint8ClampedArray(w * h * 3);
+  for (let i = 0; i < buf.length; i += 3) {
+    buf[i] = 127;
+    buf[i + 1] = 127;
+    buf[i + 2] = 127;
+  }
+  return buf;
+}
+
+/** RGBA → RGB copy for seeding the editor from an existing scaled logo image. */
+function rgbaToRgb(rgba: Uint8ClampedArray): Uint8ClampedArray {
+  const out = new Uint8ClampedArray((rgba.length / 4) * 3);
+  for (let i = 0, j = 0; i < rgba.length; i += 4, j += 3) {
+    out[j] = rgba[i]!;
+    out[j + 1] = rgba[i + 1]!;
+    out[j + 2] = rgba[i + 2]!;
+  }
+  return out;
 }
 
 function clearLogoSlot(slot: LogoLayer["slot"]): void {
@@ -140,8 +208,40 @@ export function DecorationPage() {
 
 function LogoSlotCard({ spec, mode }: { spec: LogoSlotSpec; mode: OsdMode }) {
   const layer = useComputed(() => findLogoLayerForSlot(spec.slot));
+  const { assets } = useResolvedAssets();
+  const [editorOpen, setEditorOpen] = useState<boolean>(false);
   const dims = spec.dims[mode];
   const renderedAt = spec.renderedAt[mode];
+
+  // Per-mode tile boundary so the grid overlay marks glyph cells instead of
+  // drawing a 576-line pixel mesh on the banner canvas.
+  const tileBoundary = mode === "analog" ? ANALOG_GLYPH_SIZE : GLYPH_SIZE;
+
+  const openEditor = () => setEditorOpen(true);
+  const closeEditor = () => setEditorOpen(false);
+
+  const handleSave = async (pixels: Uint8ClampedArray) => {
+    try {
+      await saveDrawnLogo(spec.slot, pixels, dims.w, dims.h);
+      closeEditor();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  // Seed the editor from the currently-resolved scaled logo image if a layer
+  // exists; otherwise blank chroma-gray. assets.logo contains the source
+  // aspect-fit scaled to slot dims — exactly what the editor wants.
+  const seedPixels = (): Uint8ClampedArray => {
+    const current = layer.value;
+    if (current) {
+      const rgba = assets.value.logo.get(current.id);
+      if (rgba && rgba.width === dims.w && rgba.height === dims.h) {
+        return rgbaToRgb(rgba.data);
+      }
+    }
+    return blankSlotPixels(dims.w, dims.h);
+  };
 
   return (
     <section class="bg-slate-900 border border-slate-800 rounded-lg p-4">
@@ -187,6 +287,16 @@ function LogoSlotCard({ spec, mode }: { spec: LogoSlotSpec; mode: OsdMode }) {
               : layer.value.source.id}
           </span>
           <div class="flex gap-2">
+            {spec.drawable && (
+              <Button
+                variant="secondary"
+                onClick={openEditor}
+                class="!px-3 !py-1 !text-[10px]"
+                title="Open the pixel editor to tweak this logo in-place"
+              >
+                ✎ Draw
+              </Button>
+            )}
             <FileDrop
               accept="image/*"
               label="Replace"
@@ -202,11 +312,45 @@ function LogoSlotCard({ spec, mode }: { spec: LogoSlotSpec; mode: OsdMode }) {
             </Button>
           </div>
         </div>
+      ) : spec.drawable ? (
+        <div class="flex flex-col gap-2">
+          <FileDrop
+            accept="image/*"
+            label={`Drop a ${dims.w}×${dims.h} image`}
+            onFile={(f) => uploadOrReplaceLogo(spec.slot, f)}
+          />
+          <div class="flex items-center gap-2 text-[10px] text-slate-500">
+            <span class="flex-1 border-t border-slate-800" />
+            <span class="font-mono">or</span>
+            <span class="flex-1 border-t border-slate-800" />
+          </div>
+          <Button
+            variant="secondary"
+            onClick={openEditor}
+            class="!text-[11px] !py-2"
+            title="Draw this logo pixel-by-pixel in-browser"
+          >
+            ✎ Draw from scratch
+          </Button>
+        </div>
       ) : (
         <FileDrop
           accept="image/*"
           label={`Drop a ${dims.w}×${dims.h} image`}
           onFile={(f) => uploadOrReplaceLogo(spec.slot, f)}
+        />
+      )}
+
+      {editorOpen && spec.drawable && (
+        <PixelEditor
+          width={dims.w}
+          height={dims.h}
+          initialPixels={seedPixels()}
+          mode={mode}
+          title={`${spec.label} · ${dims.w}×${dims.h}`}
+          tileBoundary={tileBoundary}
+          onSave={handleSave}
+          onCancel={closeEditor}
         />
       )}
     </section>

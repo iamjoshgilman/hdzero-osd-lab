@@ -7,15 +7,19 @@
 // All state comes from shared signals; no props needed.
 
 import { useComputed } from "@preact/signals";
-import { useEffect, useRef } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { project, mutate } from "@/state/store";
+import { putAsset } from "@/state/assets";
 import { selectedGlyph } from "@/state/ui-state";
 import { compose } from "@/compositor/compose";
-import { extractTile } from "@/compositor/atlas";
-import { GLYPH_SIZE } from "@/compositor/constants";
+import { extractTile, extractAnalogTile } from "@/compositor/atlas";
+import { GLYPH_SIZE, ANALOG_GLYPH_SIZE } from "@/compositor/constants";
 import { useResolvedAssets } from "@/ui/hooks/useResolvedAssets";
 import { lookupSymbol } from "@/osd-schema";
-import type { HexColor } from "@/state/project";
+import type { HexColor, OsdMode } from "@/state/project";
+import { PixelEditor } from "@/ui/pixel-editor/PixelEditor";
+import { rgbToPngBlob } from "@/ui/pixel-editor/pixel-ops";
+import { Button } from "@/ui/shared/Button";
 import {
   getGlyphMetadata,
   CATEGORY_COLORS,
@@ -23,19 +27,30 @@ import {
   type GlyphMetadata,
 } from "./glyph-metadata";
 
-const TILE_ZOOM = 4;
-const TILE_VIEW_W = GLYPH_SIZE.w * TILE_ZOOM; // 96
-const TILE_VIEW_H = GLYPH_SIZE.h * TILE_ZOOM; // 144
+/** Mode-aware tile-preview sizing + extraction helpers. */
+function tileDimsForMode(mode: OsdMode): { size: { w: number; h: number }; extract: typeof extractTile } {
+  return mode === "analog"
+    ? { size: ANALOG_GLYPH_SIZE, extract: extractAnalogTile }
+    : { size: GLYPH_SIZE, extract: extractTile };
+}
+
+const TILE_ZOOM_HD = 4; // 24×36 → 96×144 on screen
+const TILE_ZOOM_ANALOG = 8; // 12×18 → 96×144 on screen (same physical size, double density)
 
 export function InspectorPanel() {
   const { assets } = useResolvedAssets();
   const atlas = useComputed(() => compose(project.value, assets.value));
   const code = useComputed(() => selectedGlyph.value);
+  const mode = useComputed(() => project.value.meta.mode);
 
   return (
     <aside class="w-[260px] shrink-0 border-l border-slate-800 bg-slate-900 p-4 flex flex-col gap-4 overflow-y-auto font-mono text-xs">
       <h2 class="text-xs uppercase tracking-wider text-slate-400">Glyph inspector</h2>
-      {code.value === null ? <EmptyState /> : <GlyphDetails code={code.value} atlas={atlas.value} />}
+      {code.value === null ? (
+        <EmptyState />
+      ) : (
+        <GlyphDetails code={code.value} atlas={atlas.value} mode={mode.value} />
+      )}
     </aside>
   );
 }
@@ -52,10 +67,37 @@ function EmptyState() {
   );
 }
 
-function GlyphDetails({ code, atlas }: { code: number; atlas: Uint8ClampedArray }) {
+function GlyphDetails({
+  code,
+  atlas,
+  mode,
+}: {
+  code: number;
+  atlas: Uint8ClampedArray;
+  mode: OsdMode;
+}) {
   const meta = getGlyphMetadata(code);
   const color = CATEGORY_COLORS[meta.category];
   const symbol = lookupSymbol(code);
+  const [editorOpen, setEditorOpen] = useState<boolean>(false);
+  const dims = tileDimsForMode(mode);
+
+  const handleSaveTile = async (newPixels: Uint8ClampedArray): Promise<void> => {
+    try {
+      const blob = await rgbToPngBlob(newPixels, dims.size.w, dims.size.h);
+      const buf = await blob.arrayBuffer();
+      const name = `pixel-edit-${code}-${Date.now()}.png`;
+      const hash = await putAsset(buf, { name, mime: "image/png" });
+      mutate((doc) => {
+        doc.font.overrides[code] = {
+          source: { kind: "user", hash, name, mime: "image/png" },
+        };
+      });
+      setEditorOpen(false);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    }
+  };
 
   return (
     <div class="flex flex-col gap-4">
@@ -69,9 +111,30 @@ function GlyphDetails({ code, atlas }: { code: number; atlas: Uint8ClampedArray 
       </div>
 
       <div class="flex gap-3 items-start">
-        <TilePreview atlas={atlas} code={code} />
+        <TilePreview atlas={atlas} code={code} mode={mode} />
         {meta.asciiChar !== null && <AsciiPreview char={meta.asciiChar} />}
       </div>
+
+      <Button
+        variant="secondary"
+        onClick={() => setEditorOpen(true)}
+        class="!text-[11px] !py-1.5"
+        title="Open the pixel editor to draw this glyph from scratch or tweak the current tile"
+      >
+        ✎ Draw this glyph
+      </Button>
+
+      {editorOpen && (
+        <PixelEditor
+          width={dims.size.w}
+          height={dims.size.h}
+          initialPixels={dims.extract(atlas, code)}
+          mode={mode}
+          title={`Glyph #${code}${symbol ? ` · ${symbol.label}` : ""}`}
+          onSave={handleSaveTile}
+          onCancel={() => setEditorOpen(false)}
+        />
+      )}
 
       {symbol && (
         <section>
@@ -109,7 +172,7 @@ function GlyphDetails({ code, atlas }: { code: number; atlas: Uint8ClampedArray 
       {/* Color tint is HD-only — MAX7456 is 2-bit monochrome, so any tint
           would get flattened to black/white at export and mislead the pilot
           about what the goggle will actually show. */}
-      {project.value.meta.mode === "hd" && <TintEditor code={code} />}
+      {mode === "hd" && <TintEditor code={code} />}
 
       <SafetyNote meta={meta} />
     </div>
@@ -179,41 +242,53 @@ function TintEditor({ code }: { code: number }) {
   );
 }
 
-function TilePreview({ atlas, code }: { atlas: Uint8ClampedArray; code: number }) {
+function TilePreview({
+  atlas,
+  code,
+  mode,
+}: {
+  atlas: Uint8ClampedArray;
+  code: number;
+  mode: OsdMode;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const dims = tileDimsForMode(mode);
+  const zoom = mode === "analog" ? TILE_ZOOM_ANALOG : TILE_ZOOM_HD;
+  const viewW = dims.size.w * zoom;
+  const viewH = dims.size.h * zoom;
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    // Draw at native 24×36 then CSS-scale via imageRendering: pixelated for a
-    // crisp nearest-neighbor zoom. Keeps the canvas cheap.
-    canvas.width = GLYPH_SIZE.w;
-    canvas.height = GLYPH_SIZE.h;
-    const tile = extractTile(atlas, code);
+    // Draw at native pixel size then CSS-scale via imageRendering: pixelated
+    // for a crisp nearest-neighbor zoom. Keeps the canvas cheap.
+    canvas.width = dims.size.w;
+    canvas.height = dims.size.h;
+    const tile = dims.extract(atlas, code);
     // Show tile pixels as-is — chroma-gray stays chroma-gray for visual
     // consistency with the main preview canvas default.
-    const rgba = new Uint8ClampedArray(GLYPH_SIZE.w * GLYPH_SIZE.h * 4);
+    const rgba = new Uint8ClampedArray(dims.size.w * dims.size.h * 4);
     for (let i = 0, j = 0; i < tile.length; i += 3, j += 4) {
       rgba[j] = tile[i]!;
       rgba[j + 1] = tile[i + 1]!;
       rgba[j + 2] = tile[i + 2]!;
       rgba[j + 3] = 255;
     }
-    ctx.putImageData(new ImageData(rgba, GLYPH_SIZE.w, GLYPH_SIZE.h), 0, 0);
-  }, [atlas, code]);
+    ctx.putImageData(new ImageData(rgba, dims.size.w, dims.size.h), 0, 0);
+  }, [atlas, code, dims.size.w, dims.size.h, dims.extract]);
 
   return (
     <div
       class="border border-slate-700 bg-slate-800"
-      style={{ width: `${TILE_VIEW_W}px`, height: `${TILE_VIEW_H}px` }}
+      style={{ width: `${viewW}px`, height: `${viewH}px` }}
     >
       <canvas
         ref={canvasRef}
         style={{
-          width: `${TILE_VIEW_W}px`,
-          height: `${TILE_VIEW_H}px`,
+          width: `${viewW}px`,
+          height: `${viewH}px`,
           imageRendering: "pixelated",
         }}
       />

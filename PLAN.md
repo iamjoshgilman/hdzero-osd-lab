@@ -1,12 +1,12 @@
 # hdzero-osd-lab — Implementation Plan
 
-Current release: **v0.3.0**. See [CHANGELOG.md](CHANGELOG.md) for per-release detail.
+Current release: **v0.3.2**. See [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 
 ## 1. Elevator Pitch
 
 hdzero-osd-lab is a purely client-side, browser-based studio for designing OSD fonts for Betaflight quads. It supports two targets: **HDZero HD** (24-bit color, 384×1152 BMP on SD card) and **analog MAX7456** (2-bit monochrome, .mcm flashed via Configurator's Font Manager). Pilots toggle between modes and the whole UI adapts — theme, dimensions, file formats, install flow. Built on top of the conceptual groundwork from the Python-based `HD-OSD-Font-Tools`, reimplemented in TypeScript with a WYSIWYG glyph atlas, TTF palette rendering, PNG glyph overrides, live simulated OSD preview with drag-positioned elements over FPV backgrounds, and end-to-end project persistence.
 
-## 1.5 Status (as of v0.3.0)
+## 1.5 Status (as of v0.3.2)
 
 **Shipped and stable:**
 
@@ -14,8 +14,10 @@ hdzero-osd-lab is a purely client-side, browser-based studio for designing OSD f
 - ✅ Phase 2 (v0.2.0 → v0.2.23) — Live 53×20 OSD preview with 64 elements, drag-to-position, FPV background compositing, per-glyph tints, realism toggle, PNG export/copy-to-clipboard, layer reorder + edit, empty-state placeholders.
 - ✅ Phase 2.x follow-up queue — project persistence, How-To tab, logo uploader, MCM layer UI, goggle install guide.
 - ✅ Phase 3 (v0.3.0) — Analog (MAX7456) mode with full dual-target support, phosphor-CRT theme swap, MCM encoder, mode-isolated project state, mode-aware everything.
+- ✅ v0.3.1 — In-browser pixel editor for single glyphs (from the Inspector) and mini-logos (from Decoration). Pencil / eraser / fill / eyedropper, HSL shade row + presets in HD, three-state palette in analog. Saves through the existing glyph-override / logo-layer pipeline.
+- ✅ v0.3.2 — 23-issue polish pass driven by 6 parallel codebase audits. Closed several mode-switch race conditions, added a persistent error banner for storage failures (private browsing, quota, autosave), modal focus trap + aria-labels for the pixel editor, inline errors throughout (replacing OS dialogs), runtime shape validation on JSON/IDB reads.
 
-**Planned next:** in-browser pixel editor for glyphs + multi-tile canvas for logo slots. See "Planned next" under Phase 4 below.
+**Planned next:** small follow-ups (HDZero font library browser, palette seed control, analog sample fonts) plus larger Phase 4 items (zip import/export, URL-fragment sharing, a11y completeness). See "Planned next" under Phase 4 below — no monolithic v1.0 milestone, items ship when worth shipping.
 
 **Deployment reality** (differs from the original GitHub Pages plan): source on public GitHub (MIT), CI builds on every push, self-hosted from a Proxmox LXC running Caddy behind Cloudflare Tunnel at `osd.iamjoshgilman.com`. Auto-deploy polls `origin/main` every 5 min.
 
@@ -23,7 +25,7 @@ hdzero-osd-lab is a purely client-side, browser-based studio for designing OSD f
 
 - **Not** a replacement for Betaflight Configurator. We never flash, never talk MSP, never touch the FC directly. (The tool *produces* a `.mcm` the pilot uploads via Configurator in analog mode; we don't connect to the FC ourselves.)
 - **Not** a firmware tool. No goggle firmware flashing, no SD card writing (browsers cannot write arbitrary paths anyway — we emit downloadable BMP / MCM).
-- **Not** a general-purpose pixel editor. The in-browser glyph editor (planned for v0.3.1) is constrained to the tile grid with OSD palette semantics — chroma-key gray = transparent, mode-appropriate color constraints. It's not trying to replace Aseprite.
+- **Not** a general-purpose pixel editor. The in-browser glyph editor (shipped in v0.3.1) is constrained to the tile grid with OSD palette semantics — chroma-key gray = transparent, mode-appropriate color constraints. It's not trying to replace Aseprite.
 - **Not** a DVR / VTX / radio tool. Scope is strictly the OSD font + the Craft Name / warning-string payloads that ride on top of it.
 - **Not** a multi-user / cloud-sync service. Projects persist to browser IndexedDB; sharing happens via file export (zip import/export TBD).
 

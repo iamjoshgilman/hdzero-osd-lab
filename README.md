@@ -2,7 +2,7 @@
 
 Browser-based studio for designing OSD fonts for Betaflight quads — both color HD fonts for HDZero goggles and monochrome MCM fonts for analog MAX7456 flight controllers. Two builds in one project; flip a toggle to switch.
 
-100% client-side — no server, no accounts, no telemetry. Your fonts and uploads live in your own browser. Bundle is ~48 KB gzipped.
+100% client-side — no server, no accounts, no telemetry. Your fonts and uploads live in your own browser. Bundle is ~53 KB gzipped.
 
 [![build](https://github.com/iamjoshgilman/hdzero-osd-lab/actions/workflows/build.yml/badge.svg)](https://github.com/iamjoshgilman/hdzero-osd-lab/actions/workflows/build.yml)
 
@@ -16,6 +16,7 @@ Browser-based studio for designing OSD fonts for Betaflight quads — both color
 - **PNG glyph overrides**: per-tile icon replacements, aspect-fit scaled and centered.
 - **Logo slots**: BTFL banner + inline mini-logo. Both work in both modes (different pixel dims).
 - **Color tints** (HD only): per-glyph multiplicative color pass for recoloring white icons.
+- **In-browser pixel editor**: edit any single glyph from the Inspector or draw a mini-logo from Decoration. Pencil / eraser / fill / eyedropper, HSL shade row + presets in HD, three-state palette in analog. Saves through the existing override / logo-layer pipeline.
 
 **Live OSD preview** — 53×20 or 30×16 simulated Betaflight OSD with all 64 elements drag-positionable over an FPV still background (upload your own DVR frame or pick a preset). Element text (Craft Name, Pilot Name, Custom Messages) is fully editable and auto-uppercases where Betaflight does.
 
@@ -53,11 +54,13 @@ Full walkthroughs (with troubleshooting) live in the in-app How-To tab.
 
 ## Status
 
-Phase 3 "Analog mode" complete — both HDZero and analog Betaflight targets are first-class. Earlier phases delivered the HD compositor, live OSD preview with drag-to-position, and the full Phase 2.x polish queue (logo uploader, per-glyph tints, realism toggle, project persistence, How-To tab, MCM workflow).
+Current release **v0.3.2**. Both HDZero and analog Betaflight targets are first-class (Phase 3, v0.3.0). v0.3.1 added an in-browser pixel editor for single glyphs and mini-logos. v0.3.2 was an audit-driven polish pass — race-condition fixes, persistent error banner for storage failures, modal focus trap + aria-labels, runtime shape validation on JSON / IndexedDB reads, inline errors throughout (no more `alert()` dialogs).
+
+Earlier phases delivered the HD compositor, live OSD preview with drag-to-position, and the full Phase 2.x polish queue (logo uploader, per-glyph tints, realism toggle, project persistence, How-To tab, MCM workflow).
 
 See [CHANGELOG.md](CHANGELOG.md) for the per-release detail and [PLAN.md](PLAN.md) for the roadmap ahead.
 
-Next on the list: Phase 4 polish — GitHub Pages deploy, project bundle `.zip` import/export, URL-shareable builds, a11y.
+Next on the list: project bundle `.zip` import/export, URL-shareable builds, HDZero font library browser, palette seed control, a11y completeness.
 
 ## Tech stack
 

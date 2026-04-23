@@ -1,17 +1,31 @@
-# hdzero-osd-lab — Implementation Plan (v0.0.0)
+# hdzero-osd-lab — Implementation Plan
+
+Current release: **v0.3.0**. See [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 
 ## 1. Elevator Pitch
 
-hdzero-osd-lab is a purely client-side, browser-based studio for designing color HD OSD fonts and Craft Name / stats decorations for HDZero FPV goggles running Betaflight. It reimplements and extends the capabilities of the Python-based `HD-OSD-Font-Tools` fork (palette TTF rendering, per-glyph image overrides, BMP logo composition) with a WYSIWYG glyph-grid editor, a live preview of a simulated Betaflight OSD, and a novel "Decoration Generator" that turns freeform visual arrangements into the exact 15-character Craft Name string a pilot pastes into Betaflight Configurator. Everything runs in the browser, produces a valid 384×1152 BMP, and deploys for free to GitHub Pages.
+hdzero-osd-lab is a purely client-side, browser-based studio for designing OSD fonts for Betaflight quads. It supports two targets: **HDZero HD** (24-bit color, 384×1152 BMP on SD card) and **analog MAX7456** (2-bit monochrome, .mcm flashed via Configurator's Font Manager). Pilots toggle between modes and the whole UI adapts — theme, dimensions, file formats, install flow. Built on top of the conceptual groundwork from the Python-based `HD-OSD-Font-Tools`, reimplemented in TypeScript with a WYSIWYG glyph atlas, TTF palette rendering, PNG glyph overrides, live simulated OSD preview with drag-positioned elements over FPV backgrounds, and end-to-end project persistence.
+
+## 1.5 Status (as of v0.3.0)
+
+**Shipped and stable:**
+
+- ✅ Phase 1 (v0.1.0) — Compositor MVP. BMP/MCM/TTF layers, glyph overrides, byte-perfect BMP export.
+- ✅ Phase 2 (v0.2.0 → v0.2.23) — Live 53×20 OSD preview with 64 elements, drag-to-position, FPV background compositing, per-glyph tints, realism toggle, PNG export/copy-to-clipboard, layer reorder + edit, empty-state placeholders.
+- ✅ Phase 2.x follow-up queue — project persistence, How-To tab, logo uploader, MCM layer UI, goggle install guide.
+- ✅ Phase 3 (v0.3.0) — Analog (MAX7456) mode with full dual-target support, phosphor-CRT theme swap, MCM encoder, mode-isolated project state, mode-aware everything.
+
+**Planned next:** in-browser pixel editor for glyphs + multi-tile canvas for logo slots. See "Planned next" under Phase 4 below.
+
+**Deployment reality** (differs from the original GitHub Pages plan): source on public GitHub (MIT), CI builds on every push, self-hosted from a Proxmox LXC running Caddy behind Cloudflare Tunnel at `osd.iamjoshgilman.com`. Auto-deploy polls `origin/main` every 5 min.
 
 ## 2. Non-Goals
 
-- **Not** a replacement for Betaflight Configurator. We never flash, never talk MSP, never touch the FC.
-- **Not** a firmware tool. No goggle firmware flashing, no SD card writing (browsers cannot write arbitrary paths anyway — we emit downloadable BMP / JSON).
-- **Not** a general-purpose pixel editor. The glyph editor is constrained to the 24×36 tile grid with the OSD palette semantics (chroma-key gray transparent, with HD color support).
-- **Not** an analog MCM font editor. MCM import is supported as a source; MCM export is out of scope.
-- **Not** a DVR / VTX / radio tool. Scope is strictly the OSD font tile (`BTFL_000.bmp`) plus the Craft Name/warning string payloads that ride on top of it.
-- **Not** a multi-user / cloud-sync service. Projects are local JSON files the user downloads and re-imports.
+- **Not** a replacement for Betaflight Configurator. We never flash, never talk MSP, never touch the FC directly. (The tool *produces* a `.mcm` the pilot uploads via Configurator in analog mode; we don't connect to the FC ourselves.)
+- **Not** a firmware tool. No goggle firmware flashing, no SD card writing (browsers cannot write arbitrary paths anyway — we emit downloadable BMP / MCM).
+- **Not** a general-purpose pixel editor. The in-browser glyph editor (planned for v0.3.1) is constrained to the tile grid with OSD palette semantics — chroma-key gray = transparent, mode-appropriate color constraints. It's not trying to replace Aseprite.
+- **Not** a DVR / VTX / radio tool. Scope is strictly the OSD font + the Craft Name / warning-string payloads that ride on top of it.
+- **Not** a multi-user / cloud-sync service. Projects persist to browser IndexedDB; sharing happens via file export (zip import/export TBD).
 
 ## 3. High-Level Architecture
 
@@ -249,7 +263,7 @@ Each phase is a git tag. Every phase has a user-visible deliverable and acceptan
 
 ---
 
-### Phase 1 — v0.1 "Compositor MVP"
+### Phase 1 — v0.1 "Compositor MVP" ✅ shipped (v0.1.0, 2026-04-21)
 
 **Goal.** A headless, correct reimplementation of the Python tool. You can load a base BMP + a TTF + a logo + overrides and get a downloadable 384×1152 BMP that is byte-level indistinguishable (modulo RNG and TTF rasterizer differences) from what `fontbuilder.py` emits.
 
@@ -265,7 +279,7 @@ Each phase is a git tag. Every phase has a user-visible deliverable and acceptan
 
 ---
 
-### Phase 2 — v0.2 "OSD Live Preview"
+### Phase 2 — v0.2 "OSD Live Preview" ✅ shipped (v0.2.0 → v0.2.23, 2026-04-22)
 
 **Goal.** Simulate what the font will look like in-flight. Pick an OSD element from a library, drag it onto a 53×20 grid, see it render using the current composed font in real time.
 
@@ -320,92 +334,109 @@ Each phase is a git tag. Every phase has a user-visible deliverable and acceptan
 
 ---
 
-### Phase 2.x — Post-v0.2 follow-ups (v0.2.6+)
+### Phase 2.x — Post-v0.2 follow-ups ✅ mostly shipped
 
-User-requested papercut fixes and small wins that don't justify their own phase:
+User-requested papercut fixes and small wins that rode alongside v0.2.x / v0.3.0:
 
-- ~~**How-To tab** — dedicated in-app guide with step-by-step directions for first-time visitors. Sits next to `Resources` in the top bar. Sections: "Your first font" (pick sample → drop icon override → download), "Bring your own TTF" (upload → palette → apply per-glyph tints), "Design an OSD screenshot" (layout → bg image → share). All static content, no state. Replaces the need for a modal tutorial popup — discoverable at any time, not intrusive.~~ Shipped in v0.2.18.
-- **HDZero library browser** — fetch-and-preview community BTFL fonts inline (github.com/hd-zero/hdzero-osd-font-library) without leaving the app.
-- **Logo / mini-logo uploader** — drag a PNG onto the BTFL logo slot or the 120×36 mini-logo zone; compositor already supports both via `-btfllogo`-equivalent code paths.
-- **MCM layer UI** — plug the existing `parseMcm` loader into a layer form so users can overlay analog OSD fonts the same way they can TTFs.
-- ~~**Project persistence across reloads** — write the `ProjectDoc` + asset manifest to IndexedDB on every mutate (not just assets). Lets the auto-bootstrap sample load only on truly first visit instead of every page load.~~ Shipped in v0.2.17.
-- **Seed control for palette layers** — UI for `project.meta.rngSeed` so users can lock a pleasing random roll reproducibly, or shuffle until one looks good.
+- ~~**How-To tab**~~ — shipped v0.2.18 (mode-aware, installation flow per target).
+- ~~**Logo / mini-logo uploader**~~ — shipped v0.2.11, fixed rendering in v0.2.12, extended to analog in v0.3.0 with halved dimensions.
+- ~~**MCM layer UI**~~ — shipped v0.2.22 (form + layer card), render bug fix v0.2.23.
+- ~~**Project persistence across reloads**~~ — shipped v0.2.17 (IndexedDB-backed auto-save).
+- ~~**Goggle install walkthrough in-app**~~ — shipped v0.2.19, split per-mode in v0.3.0.
 
-### Phase 4 — v1.0 "Polish, Sharing, Docs"
+**Not yet shipped (still on the list):**
 
-**Goal.** A launchable public release.
+- **HDZero library browser** — fetch-and-preview community BTFL fonts inline without leaving the app.
+- **Seed control for palette layers** — UI for `project.meta.rngSeed` so users can lock a pleasing random palette roll reproducibly or shuffle until they like the result.
+- **Analog sample fonts** — bundled `.mcm` fonts for the analog mode sample dropdown. Blocked on finding redistributable sources.
 
-**User-visible deliverable.**
+### Phase 4 — "Planned next"
 
-- Export whole project as `.hdzero-osd-lab.zip` (JSON + user-uploaded assets).
-- Import the same.
-- Shareable URL shortcode (encode project doc into a `#fragment` for small projects — no server; large projects fall back to "download bundle").
-- Undo/redo across all panels.
-- Accessibility pass (keyboard nav, ARIA, visible focus).
-- "Load sample project" menu showing 2-3 canned builds (WhiteRqbbit, plain JetBrains Mono recolor, icon-only override-on-stock).
-- Documentation site generated from `docs/` via a single Markdown-rendered route.
-- Full CHANGELOG.md, GitHub Actions deploy to Pages, proper 404 page.
-- Crash handler that serializes the project to a downloadable JSON before any unrecoverable error.
+Not a monolithic v1.0 release anymore — "polish as we go" has been the actual pattern (the app is already publicly live at osd.iamjoshgilman.com, MIT-licensed, CI green on every commit, auto-deployed). What's left is a short list of specific features, each shippable on its own timeline.
 
-**Acceptance criteria.**
+#### v0.3.1 — In-browser pixel editor
 
-- Lighthouse: Performance ≥ 90, Best Practices ≥ 95, A11y ≥ 90.
-- Bundle size: main JS < 350 KB gzipped excluding fonts.
-- Works offline after first load (service worker).
-- Manual e2e checklist executes green.
+The biggest outstanding capability gap: pilots can upload/compose/override glyphs but can't *draw* them. Closing that loop turns the tool into a self-contained font designer.
+
+**Approach — self-rolled, not Piskel embed:**
+
+- A tile is 216 pixels (analog) or 864 (HD) — too small to justify pulling in a full editor.
+- Tight integration with the compositor matters. Edits need to flow through the existing glyph-override pipeline (no export/import dance).
+- Estimated scope: ~200 lines + pure pixel ops. Maybe 3–4 hours of focused work for the single-glyph editor; multi-tile canvas is a follow-up on the same primitives.
+
+**Single-glyph editor (main deliverable):**
+
+- Modal popup triggered by a new "✎ Draw" button in the Glyph Inspector.
+- Canvas renders the current composed tile at ~16× zoom with nearest-neighbor.
+- Toolbar: pencil, eraser (→ chroma-gray), fill bucket, eyedropper, color swatch, grid toggle, undo/redo (editor-scoped).
+- Mode-aware color constraints: HD = free-form 24-bit picker; analog = 3-button palette (black / white / transparent) so the editor can't mislead the preview.
+- Seed from "whatever the glyph looks like right now" (extracted from the composed atlas). Option to clear to blank.
+- Save writes through the existing glyph-override mechanism. Persists via autosave; shows up in the LayersPanel overrides list.
+
+**Multi-tile canvas (v0.3.2 follow-up):**
+
+- "✎ Design" button next to each Decoration logo slot.
+- Canvas sized to the slot's full dimensions (576×144 / 120×36 in HD, halved in analog) with a tile-boundary grid overlay so users can see where glyphs break.
+- Save feeds the image through the existing logo-uploader pipeline — same code path as "drop a PNG."
+
+#### Known smaller items
+
+- Zip import/export (`.hdzero-osd-lab.zip` = JSON + user-uploaded assets). Currently assets persist in IndexedDB only, no portable bundle.
+- Shareable URL encoding for small projects (`#fragment`-encoded doc, server-less).
+- A11y pass — keyboard nav on the element library and OSD canvas, visible-focus outlines, ARIA on the mode toggle.
+- HDZero library browser (Phase 2.x carryover) — fetch community fonts inline.
+- Seed control for TTF palette layers.
+
+Nothing in this section is time-boxed; items ship when they're worth shipping. No v1.0 milestone planned — SemVer keeps working incrementally.
 
 ---
 
 ## 7. Testing Strategy
 
-### Unit tests (Vitest)
+What actually ships:
 
-- `compositor/matrix.test.ts`: every row of `SWITCH_EXT_SUBSET_OFFSET_MATRIX` produces the expected glyph-subset tile-write list. Compare directly to hand-computed expectations.
-- `encoders/bmp.test.ts`: write a 2×2 red pixel, parse with an independent BMP reader, assert bytes match. Also check the 1,327,158-byte total for 384×1152 (file header 14 + DIB 40 + 3 bytes/pixel + row padding to 4-byte boundary; 384×3 = 1152, already aligned, so no padding rows).
-- `loaders/bmp.test.ts`: BMP round-trip (write → read → write) is byte-stable.
-- `loaders/mcm.test.ts`: `BTFL_analog_default.mcm` loads to the expected tile count and a few hand-verified pixels.
-- `decoration/craft-name.test.ts`: slot-to-payload resolver handles letters, digits, `[\]^_`, and invalid codes.
+- **Vitest unit tests**, 182 as of v0.3.0 across 21 files. Cover the compositor (atlas ops, compose dispatch, both HD and analog paths), loaders (BMP decode, MCM parse native + upscaled, image-to-tile at both target sizes, TTF arg validation), encoders (BMP byte-exact, MCM round-trip), state (project defaults + migration, persistence, undo, switchMode isolation, autosave debounce), and OSD schema invariants.
+- **Typecheck gate** via `tsc --noEmit` in strict mode with `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes`.
+- **CI on every push/PR** (`.github/workflows/build.yml`) runs typecheck + tests + production build, uploads `dist/` as a 30-day artifact.
+- **Browser verify before push** (see MEMORY / feedback notes) — features that touch `src/` get hands-on verification in `npm run dev` before the push, because Proxmox auto-deploys from `origin/main`.
 
-### Golden image tests
+**Deliberately not pursuing:**
 
-- For each fixture project, compose the font and compare its pixel buffer to a committed `.golden.bmp` file with a per-pixel tolerance of ±2 per channel. TTF differences between browser canvas and pygame.font are the biggest known source of drift; fixtures use bitmap layers only for strict equality, and a separate set of TTF fixtures with looser tolerance.
-- Visual regression via `vitest` + `pixelmatch`. Fixture inputs live in `src/test/fixtures/`.
-
-### Manual e2e
-
-- Playwright script walks the happy path: load sample project → swap one glyph → change Craft Name decoration → export BMP → read exported file back → assert byte equality to a committed reference.
-- Smoke-tested manually on Chrome, Firefox, Edge. No Safari guarantee in v1.0 (noted as a known limitation; the BMP / Canvas code is standards-compliant, but we don't block on Safari-specific bugs).
-
-### CI gates
-
-- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, Playwright smoke, Lighthouse budget check on a headless build. All four must pass to merge.
+- Playwright e2e. Manual browser verification has caught every real bug so far; the e2e infrastructure cost wouldn't pay off for a solo-maintained hobby project.
+- Lighthouse budget checks. Bundle's ~46 KB gzipped; that's well under any reasonable budget without automated gating.
+- Golden image regression suites. The unit tests cover the byte-level invariants; visual regressions get caught during browser verify.
+- Cross-browser matrix. Works on current Chrome/Firefox/Edge. Safari not tested — the tool uses OffscreenCanvas and FontFace which Safari supports but is sometimes funky about; we don't block on Safari bugs.
 
 ## 8. Deployment Pipeline
 
-- **CI (`.github/workflows/ci.yml`).** On every PR: install, lint, typecheck, test, build, upload build artifact.
-- **Pages (`.github/workflows/pages.yml`).** On push to `main`: build, then `actions/deploy-pages@v4` with the `dist/` directory. Vite base path set to `/hdzero-osd-lab/` via an env-driven `vite.config.ts`.
-- **Releases.** Each phase tag (`v0.1`, `v0.2`, `v0.3`, `v1.0`) triggers a release workflow that attaches the built `dist.zip` to the release and writes a dated section to `CHANGELOG.md` via `release-please` or a hand script.
-- **Branch protection.** `main` protected, PRs required, CI required.
+**Actual reality, different from the original plan:**
+
+- **CI — `.github/workflows/build.yml`.** On every push and PR: `npm ci`, typecheck, `npm run test:run`, `npm run build`. Uploads `dist/` as a 30-day artifact. Green badge in README.
+- **Self-hosted production.** Public GitHub repo ([iamjoshgilman/hdzero-osd-lab](https://github.com/iamjoshgilman/hdzero-osd-lab), MIT). Proxmox LXC container runs Caddy serving static `dist/` on localhost:8080. `cloudflared` tunnels to `osd.iamjoshgilman.com`. Strict CSP + security headers at the Caddy layer. No inbound ports on the host — the tunnel is outbound-only.
+- **Auto-deploy.** `systemd` timer on the LXC polls `origin/main` every 5 min; on new commit it runs a local `git pull && npm ci && npm run build && systemctl reload caddy`. Worst-case 5-min delay between push and live.
+- **Releases.** Tag per version (`v0.1.0`, `v0.2.x`, `v0.3.0`, etc.) pushed to GitHub after user confirms the feature works in-browser. Releases page renders the CHANGELOG entry and links the tagged commit.
 
 ## 9. Versioning
 
-- **SemVer.** Major = breaking project-document schema change. Minor = feature. Patch = fixes.
-- **Project doc schema.** `schemaVersion` is an integer, never omitted. Loaders include a migration switch; every new major version must provide an automated migration from the previous version, covered by tests.
-- **Git tags per phase.** `v0.1` (MVP), `v0.2` (OSD preview), `v0.3` (decoration), `v1.0` (polish). Hotfix tags `v0.1.1` etc.
-- **CHANGELOG.md.** Keep-a-Changelog format. Every user-visible change lands under `## [Unreleased]` during development, gets cut on tag.
+- **SemVer.** Patch = fix / small polish. Minor = feature. Major = breaking `schemaVersion` bump (none yet — we're still on schemaVersion=1).
+- **Project doc schema.** `schemaVersion` is an integer, never omitted. `projectFromJson` handles forward-compat additions (new optional fields auto-default on load, e.g. `meta.mode = "hd"` for pre-v0.3.0 saves). Breaking changes get a dedicated migration function when needed.
+- **CHANGELOG.md** — Keep-a-Changelog format. Per-version entries written at the time of tag, covering what shipped + why.
 
 ## 10. Known Risks and Open Questions
 
-- **TTF rasterization parity with pygame.** Our Phase 1 parity test allows ±2 per channel tolerance for TTF layers. If parity is too low, options: (a) ship a WASM build of FreeType, (b) accept the drift and document it, (c) render via canvas with a configurable "super-sampling" parameter that mimics the Python tool's 8x approach. Current bet: (c) gets us to acceptable.
-- **SVG rasterization in the browser.** The Python tool uses PyMuPDF. In the browser the recipe is: parse SVG text with `DOMParser`, serialize, load via `<img src="data:image/svg+xml;utf8,..." />`, draw to canvas with `drawImage` at the target size. Catch: some SVG features (filters, masks) render inconsistently across browsers. We'll ship a "preview in Chrome/Firefox" note and document unsupported constructs.
-- **BMP byte-parity with pygame.** Pygame writes 24-bit BMPs with default v3 header; we match that. Risk: pygame may write row padding and color space metadata differently. Mitigated by writing a canonical v3 header ourselves and comparing only pixel data, not header bytes, in tests.
-- **MCM parser coverage.** We've only seen Betaflight- and INAV-style MCM files. If upstream ships variants (different header magic, odd line terminators), tests will catch but fixes may be invasive.
-- **Craft Name length in HDZero.** Betaflight's Craft Name is canonically 15 chars; HDZero firmware renders up to some length we need to confirm. Open question: do we surface a per-firmware length hint, or a global 15? Plan: configurable in the decoration panel with a sensible default of 15.
-- **IndexedDB quota on mobile.** Large user TTFs could blow browser storage. Plan: show a quota usage bar; offer "evict unused assets".
-- **Service worker cache invalidation.** Classic Pages-hosted SPA gotcha. Use Vite's filename hashing + a tiny `sw.ts` that network-firsts `index.html`.
-- **Betaflight schema drift.** BF adds/renames OSD elements over time. We version `osd-schema/` and document the BF version it targets.
-- **Licensing of bundled sample fonts.** Anything shipped in `public/sample-fonts/` must have a license we can redistribute. Default shipped font is one we author from scratch or a permissively-licensed community font with explicit credit.
-- **Web access parity with the Python `fetch_icon.py` helper.** Fetching game-icons.net from the browser requires CORS. Plan: provide an "upload SVG" flow instead of fetching; optionally a tiny documented PowerShell script in `tools/` that does what `fetch_icon.py` did.
+**Live:**
+
+- **Betaflight schema drift.** BF periodically adds / renames / removes OSD elements. Our `osd-schema/` is a snapshot; drift could cause sample coordinates or codes to go stale. Mitigation: the schema is all data, not code — a manual audit against Betaflight source is a quick fix when needed.
+- **Bundled sample-font licensing.** Community analog `.mcm` fonts aren't broadly MIT-licensed; v0.3.0 ships zero bundled analog samples for this reason. HD samples in `public/sample-fonts/` are credited in NOTICE with a "remove-on-request" stance. Future additions need explicit redistributable licensing.
+- **IndexedDB quota on mobile.** Large TTFs could blow browser storage. No mitigation shipped yet (users haven't hit it); when they do, a quota-usage bar + "evict unused assets" flow is ready behind the existing `evictUnused` helper.
+- **Analog MCM variant coverage.** Our parser handles standard Betaflight/INAV-style MCMs. If upstream ships different header magic or odd line terminators, existing tests should catch it but a fix may be invasive.
+
+**Resolved / no longer a concern:**
+
+- ~~TTF rasterization parity with pygame~~ — our supersampling approach shipped in v0.1.x and has been validated in practice.
+- ~~BMP byte-parity with pygame~~ — v0.1.0 roundtrip tests lock byte-level output.
+- ~~Service worker cache invalidation~~ — no service worker shipped; cache-busting handled by Vite filename hashing + Caddy `Cache-Control` per path (index.html no-cache, assets immutable for 1y).
+- ~~Web access parity with `fetch_icon.py`~~ — not pursued; upload flow works, game-icons.net fetching deferred indefinitely.
 
 ## 11. Credits & License
 

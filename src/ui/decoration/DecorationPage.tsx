@@ -210,6 +210,7 @@ function LogoSlotCard({ spec, mode }: { spec: LogoSlotSpec; mode: OsdMode }) {
   const layer = useComputed(() => findLogoLayerForSlot(spec.slot));
   const { assets } = useResolvedAssets();
   const [editorOpen, setEditorOpen] = useState<boolean>(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const dims = spec.dims[mode];
   const renderedAt = spec.renderedAt[mode];
 
@@ -217,15 +218,19 @@ function LogoSlotCard({ spec, mode }: { spec: LogoSlotSpec; mode: OsdMode }) {
   // drawing a 576-line pixel mesh on the banner canvas.
   const tileBoundary = mode === "analog" ? ANALOG_GLYPH_SIZE : GLYPH_SIZE;
 
-  const openEditor = () => setEditorOpen(true);
+  const openEditor = () => {
+    setSaveError(null);
+    setEditorOpen(true);
+  };
   const closeEditor = () => setEditorOpen(false);
 
   const handleSave = async (pixels: Uint8ClampedArray) => {
+    setSaveError(null);
     try {
       await saveDrawnLogo(spec.slot, pixels, dims.w, dims.h);
       closeEditor();
     } catch (err) {
-      alert(err instanceof Error ? err.message : String(err));
+      setSaveError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -258,6 +263,12 @@ function LogoSlotCard({ spec, mode }: { spec: LogoSlotSpec; mode: OsdMode }) {
       </header>
 
       <p class="text-[11px] text-slate-400 leading-snug mb-3 max-w-2xl">{spec.purpose}</p>
+
+      {saveError && (
+        <p class="text-[11px] text-osd-alert leading-snug mb-3" role="alert">
+          ⚠ {saveError}
+        </p>
+      )}
 
       <div class="bg-slate-950/60 border border-slate-800 rounded p-3 mb-3 text-[11px] font-mono">
         <div class="text-slate-500 uppercase tracking-wider text-[9px] mb-1">

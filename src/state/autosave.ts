@@ -11,6 +11,7 @@ import {
   loadPersistedProject,
   clearPersistedProject,
 } from "./project-persist";
+import { persistenceError } from "./ui-state";
 
 let hydrated = false;
 let installed = false;
@@ -26,17 +27,29 @@ let pendingTimer: number | null = null;
 export async function hydrateFromPersistence(): Promise<boolean> {
   try {
     const doc = await loadPersistedProject();
-    if (!doc) return false;
-    // replaceProject pushes onto the undo stack; since the stack starts empty
-    // on boot, the user ends up with one "pre-hydration" default state they
-    // could undo back to. Acceptable — better than silently losing a step.
+    if (!doc) {
+      hydrated = true;
+      return false;
+    }
+    // Flip `hydrated` BEFORE `replaceProject()` so the autosave effect sees
+    // the correct value on the very first invocation. Previously the flag
+    // lived in a finally block that ran after replaceProject triggered the
+    // effect, producing a brief window where the first-run saw hydrated=false,
+    // bailed, then the next re-run saw true and saved — a redundant write
+    // and confusing trace. Setting it first removes the race.
+    hydrated = true;
     replaceProject(doc);
     return true;
   } catch (err) {
+    // IndexedDB is likely unavailable (private browsing, storage blocked).
+    // Flag a persistent banner so the user knows their work won't survive a
+    // reload. App keeps working in-memory-only.
     console.error("hydrateFromPersistence failed:", err);
-    return false;
-  } finally {
+    persistenceError.value =
+      "Can't access browser storage — your work will not persist across page reloads. " +
+      "Private browsing mode or blocked site data is the usual cause.";
     hydrated = true;
+    return false;
   }
 }
 
@@ -56,9 +69,24 @@ export function installAutoSave(debounceMs = 300): void {
     if (!hydrated) return;
     if (pendingTimer !== null) clearTimeout(pendingTimer);
     pendingTimer = window.setTimeout(() => {
-      savePersistedProject(doc).catch((err) =>
-        console.error("auto-save failed:", err),
-      );
+      savePersistedProject(doc)
+        .then(() => {
+          // Clear any prior persistence error on successful save — a
+          // transient hiccup shouldn't leave the banner showing forever.
+          if (persistenceError.value) persistenceError.value = null;
+        })
+        .catch((err) => {
+          console.error("auto-save failed:", err);
+          // Quota exceeded shows up here as a DOMException with name
+          // "QuotaExceededError"; surface a specific message so the user
+          // knows what to clean up.
+          const msg =
+            err instanceof DOMException && err.name === "QuotaExceededError"
+              ? "Browser storage is full — your changes aren't being saved. Clear unused assets or your browser's site data."
+              : "Auto-save failed — your changes may not survive a page reload. " +
+                (err instanceof Error ? err.message : String(err));
+          persistenceError.value = msg;
+        });
       pendingTimer = null;
     }, debounceMs);
   });

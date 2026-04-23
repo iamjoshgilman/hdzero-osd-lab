@@ -232,10 +232,10 @@ export function TtfLayerForm({ onClose, editing }: Props) {
         <Button
           variant="primary"
           onClick={saveLayer}
-          disabled={!pending}
+          disabled={!pending || busy}
           class="flex-1 !text-xs"
         >
-          {editing ? "Save changes" : "Add layer"}
+          {busy ? "Storing…" : editing ? "Save changes" : "Add layer"}
         </Button>
         <Button variant="secondary" onClick={onClose} class="!text-xs">
           Cancel

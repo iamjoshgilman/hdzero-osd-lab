@@ -25,8 +25,10 @@ export function TabBar() {
           <button
             key={tab.id}
             onClick={() => (currentView.value = tab.id)}
+            aria-current={isActive ? "page" : undefined}
             class={[
               "px-4 py-2 font-mono text-sm rounded-t transition-colors",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-osd-mint",
               isActive
                 ? "bg-slate-950 text-osd-mint border-t border-x border-slate-700"
                 : "text-slate-400 hover:text-slate-200 hover:bg-slate-800",

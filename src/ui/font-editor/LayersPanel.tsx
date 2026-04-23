@@ -1,5 +1,7 @@
 // Sidebar showing current layers + overrides with add/remove/toggle.
-// v0.1.0 supports uploading a base BMP and per-glyph PNG overrides.
+// Mode-aware: base-drop accepts BMP+MCM in HD, MCM-only in analog; TTF
+// layers render at native tile size per mode; glyph overrides go through
+// a mode-appropriate downscale path at resolve time.
 
 import { useComputed } from "@preact/signals";
 import { useRef, useState } from "preact/hooks";
@@ -24,6 +26,9 @@ export function LayersPanel() {
   const [ttfFormOpen, setTtfFormOpen] = useState<boolean>(false);
   const [mcmFormOpen, setMcmFormOpen] = useState<boolean>(false);
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
+  // Inline error surface — replaces alert() dialogs that blocked the user's
+  // flow. Cleared on the next attempted action.
+  const [panelError, setPanelError] = useState<string | null>(null);
 
   /**
    * Base-font drop. Branches on file extension + current mode:
@@ -31,11 +36,12 @@ export function LayersPanel() {
    *   - Analog mode: .mcm → native MCM layer, .bmp → rejected (no analog BMP format)
    */
   const addBaseFont = async (file: File) => {
+    setPanelError(null);
     const isMcm = /\.mcm$/i.test(file.name);
     const isBmp = /\.bmp$/i.test(file.name);
     if (mode.value === "analog" && isBmp) {
-      alert(
-        "Analog mode accepts .mcm files only. The 384×1152 BMP format is HD-specific — switch to HDZero mode above if this is an HD font.",
+      setPanelError(
+        "Analog mode accepts .mcm files only. Switch to HDZero mode above if this is an HD font.",
       );
       return;
     }
@@ -77,10 +83,13 @@ export function LayersPanel() {
   };
 
   const loadSample = async (filename: string, displayName: string) => {
+    setPanelError(null);
     try {
       await addSampleFontAsBaseLayer(filename, displayName);
     } catch (err) {
-      alert(err instanceof Error ? err.message : String(err));
+      setPanelError(
+        `Sample load failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   };
 
@@ -137,6 +146,23 @@ export function LayersPanel() {
 
   return (
     <aside class="w-80 shrink-0 border-r border-slate-800 bg-slate-900 p-4 flex flex-col gap-5 overflow-y-auto">
+      {panelError && (
+        <div
+          role="alert"
+          class="border border-osd-alert/50 bg-osd-alert/10 rounded px-2 py-1.5 flex items-start gap-2"
+        >
+          <span class="flex-1 text-[11px] text-osd-alert font-mono leading-snug">
+            ⚠ {panelError}
+          </span>
+          <button
+            onClick={() => setPanelError(null)}
+            aria-label="Dismiss error"
+            class="text-osd-alert/70 hover:text-osd-alert text-[10px] rounded px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-osd-alert"
+          >
+            ×
+          </button>
+        </div>
+      )}
       <section>
         <h2 class="text-xs font-mono uppercase tracking-wider text-slate-400 mb-2">
           Target
@@ -288,6 +314,7 @@ export function LayersPanel() {
                       variant="secondary"
                       onClick={() => moveLayerUp(layer.id)}
                       disabled={isTop}
+                      aria-label="Move layer up (toward top of stack)"
                       class="!px-1.5 !py-1 !text-[10px]"
                       title="Move up (toward top of stack)"
                     >
@@ -297,6 +324,7 @@ export function LayersPanel() {
                       variant="secondary"
                       onClick={() => moveLayerDown(layer.id)}
                       disabled={isBottom}
+                      aria-label="Move layer down (toward base)"
                       class="!px-1.5 !py-1 !text-[10px]"
                       title="Move down (toward base)"
                     >
@@ -315,6 +343,7 @@ export function LayersPanel() {
                           editingLayerId === layer.id ? null : layer.id,
                         );
                       }}
+                      aria-label="Edit layer settings"
                       class="!px-2 !py-1"
                       title="Edit layer settings"
                     >
@@ -324,7 +353,9 @@ export function LayersPanel() {
                   <Button
                     variant="danger"
                     onClick={() => removeLayer(layer.id)}
+                    aria-label="Delete layer"
                     class="!px-2 !py-1"
+                    title="Delete layer"
                   >
                     ×
                   </Button>
@@ -372,7 +403,9 @@ export function LayersPanel() {
               <Button
                 variant="danger"
                 onClick={() => removeOverride(Number(codeStr))}
+                aria-label={`Remove override for glyph ${codeStr}`}
                 class="!px-2 !py-1"
+                title="Remove this override"
               >
                 ×
               </Button>
@@ -479,16 +512,18 @@ function OverrideAdder({ onAdd }: { onAdd: (code: number, file: File) => void })
   const fileRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const selected = useComputed(() => selectedGlyph.value);
+  const [error, setError] = useState<string | null>(null);
 
   // Two-way sync: when a glyph is clicked on the canvas, the input reflects it.
   // When the user types a number, the selection updates so the preview highlights.
   const inputValue = selected.value === null ? "" : String(selected.value);
 
   const triggerUpload = () => {
+    setError(null);
     const raw = inputRef.current?.value ?? "";
     const code = Number(raw);
     if (!raw || !Number.isFinite(code) || code < 0 || code > 511) {
-      alert("Pick a code 0–511 (click a glyph or type a number)");
+      setError("Pick a code 0–511 (click a glyph or type a number)");
       return;
     }
     const fileEl = fileRef.current;
@@ -533,6 +568,7 @@ function OverrideAdder({ onAdd }: { onAdd: (code: number, file: File) => void })
           Upload
         </Button>
       </div>
+      {error && <span class="text-osd-alert text-[10px]">⚠ {error}</span>}
     </label>
   );
 }

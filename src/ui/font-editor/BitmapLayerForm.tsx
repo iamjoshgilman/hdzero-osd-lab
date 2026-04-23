@@ -8,7 +8,6 @@
 import { useState } from "preact/hooks";
 import { mutate } from "@/state/store";
 import { putAsset } from "@/state/assets";
-import { addSampleFontAsBaseLayer } from "@/state/bootstrap";
 import { FileDrop } from "@/ui/shared/FileDrop";
 import { Button } from "@/ui/shared/Button";
 import type { BitmapLayer } from "@/state/project";
@@ -107,8 +106,6 @@ export function BitmapLayerForm({ onClose, editing }: Props) {
     } finally {
       setBusy(false);
     }
-    // addSampleFontAsBaseLayer unused in this file — kept imported for possible future inline-add flow.
-    void addSampleFontAsBaseLayer;
   };
 
   const save = () => {

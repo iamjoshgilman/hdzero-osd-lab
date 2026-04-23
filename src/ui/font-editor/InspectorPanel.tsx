@@ -80,22 +80,47 @@ function GlyphDetails({
   const color = CATEGORY_COLORS[meta.category];
   const symbol = lookupSymbol(code);
   const [editorOpen, setEditorOpen] = useState<boolean>(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  // Unmount flag — if the user closes the modal (or the glyph selection
+  // changes) while the save's async chain is in flight, we bail on the
+  // mutate. Previously the chain would finish and write an override for
+  // a stale glyph code / stale mode.
+  const savedRef = useRef<{ open: boolean; code: number; mode: OsdMode }>({
+    open: editorOpen,
+    code,
+    mode,
+  });
+  savedRef.current = { open: editorOpen, code, mode };
   const dims = tileDimsForMode(mode);
 
   const handleSaveTile = async (newPixels: Uint8ClampedArray): Promise<void> => {
+    // Snapshot the identity of this save at the moment it starts — code,
+    // mode, and "modal is still open" — so the async chain can check at
+    // the end that none of those changed. If they did, the user has
+    // moved on and landing the override would be wrong.
+    const startCode = code;
+    const startMode = mode;
+    setSaveError(null);
     try {
       const blob = await rgbToPngBlob(newPixels, dims.size.w, dims.size.h);
       const buf = await blob.arrayBuffer();
-      const name = `pixel-edit-${code}-${Date.now()}.png`;
+      const name = `pixel-edit-${startCode}-${Date.now()}.png`;
       const hash = await putAsset(buf, { name, mime: "image/png" });
+      const current = savedRef.current;
+      if (!current.open || current.code !== startCode || current.mode !== startMode) {
+        // Modal closed or selection/mode changed since save started — abort.
+        // Asset is already in IndexedDB cache; next time it's needed the
+        // hash will resolve. Not worth deleting the orphan right now.
+        return;
+      }
       mutate((doc) => {
-        doc.font.overrides[code] = {
+        doc.font.overrides[startCode] = {
           source: { kind: "user", hash, name, mime: "image/png" },
         };
       });
       setEditorOpen(false);
     } catch (err) {
-      alert(err instanceof Error ? err.message : String(err));
+      setSaveError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -117,12 +142,19 @@ function GlyphDetails({
 
       <Button
         variant="secondary"
-        onClick={() => setEditorOpen(true)}
+        onClick={() => {
+          setSaveError(null);
+          setEditorOpen(true);
+        }}
         class="!text-[11px] !py-1.5"
         title="Open the pixel editor to draw this glyph from scratch or tweak the current tile"
       >
         ✎ Draw this glyph
       </Button>
+
+      {saveError && (
+        <p class="text-[11px] text-osd-alert leading-snug">⚠ {saveError}</p>
+      )}
 
       {editorOpen && (
         <PixelEditor

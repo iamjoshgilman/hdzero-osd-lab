@@ -91,7 +91,7 @@ const SECTIONS: readonly ResourceSection[] = [
     id: "typefaces",
     title: "Typefaces (TTF) for text layers",
     blurb:
-      "When the TTF palette layer ships (v0.2.x), these are good starting points. Monospaced typefaces hold up best at 24×36 tile size.",
+      "Good starting points for TTF palette layers. Monospaced typefaces hold up best at 24×36 in HD mode; pixel-designed fonts read best at 12×18 in analog mode.",
     links: [
       {
         title: "Google Fonts",

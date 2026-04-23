@@ -11,11 +11,14 @@ type BaseProps = Omit<JSX.HTMLAttributes<HTMLButtonElement>, "children"> & {
 
 const CLASSES: Record<Variant, string> = {
   primary:
-    "bg-osd-mint text-slate-900 hover:bg-emerald-300 focus:ring-2 focus:ring-osd-mint disabled:bg-slate-600 disabled:text-slate-400",
+    "bg-osd-mint text-slate-900 hover:bg-emerald-300 focus-visible:ring-2 focus-visible:ring-osd-mint disabled:bg-slate-700 disabled:text-slate-500 disabled:opacity-60",
+  // Disabled secondary used to collapse to the same bg as active — pilots
+  // couldn't tell whether an Undo/Redo button was clickable. Darker bg +
+  // opacity tells them "not right now" at a glance.
   secondary:
-    "bg-slate-800 text-slate-100 hover:bg-slate-700 focus:ring-2 focus:ring-slate-500 disabled:bg-slate-800 disabled:text-slate-500",
+    "bg-slate-800 text-slate-100 hover:bg-slate-700 focus-visible:ring-2 focus-visible:ring-slate-500 disabled:bg-slate-900 disabled:text-slate-500 disabled:opacity-60",
   danger:
-    "bg-osd-alert text-slate-50 hover:bg-red-400 focus:ring-2 focus:ring-osd-alert disabled:bg-slate-700 disabled:text-slate-500",
+    "bg-osd-alert text-slate-50 hover:bg-red-400 focus-visible:ring-2 focus-visible:ring-osd-alert disabled:bg-slate-700 disabled:text-slate-500 disabled:opacity-60",
 };
 
 export function Button({ variant = "primary", class: className, children, ...rest }: BaseProps) {

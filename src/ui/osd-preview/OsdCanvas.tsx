@@ -1,10 +1,12 @@
-// Renders a simulated 53×20 Betaflight OSD using the current composed font
-// as a sprite atlas. Each enabled element from OSD_ELEMENTS draws its sample
-// glyph sequence at the element's effective position (project layout override
-// if present, otherwise the schema default).
+// Renders a simulated Betaflight OSD using the current composed font as a
+// sprite atlas. Grid dimensions adapt to project mode — 53×20 in HD, 30×16
+// in analog. Each enabled element from OSD_ELEMENTS draws its sample glyph
+// sequence at the element's effective position (project layout override if
+// present, otherwise the schema/analog default).
 //
-// alpha.2 scope: rendering only. Drag-to-reposition + element selection land
-// in alpha.3.
+// Interaction: click to select an element, drag to reposition (mode-aware
+// clamping keeps elements inside the grid). Right-side panel (ElementLibrary)
+// handles visibility toggles and per-element text inputs.
 
 import { useEffect, useRef, useState } from "preact/hooks";
 import { useComputed } from "@preact/signals";
@@ -392,10 +394,31 @@ export function OsdCanvas() {
     setDrag(next);
   };
 
+  // Track the in-flight flashMsg timer so a repeat flash cancels the
+  // previous one instead of stacking — and so unmount clears any pending
+  // timer (otherwise each copy/download leaves a 1.8s timer to fire at a
+  // component that's long gone).
+  const flashTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (flashTimerRef.current !== null) {
+        window.clearTimeout(flashTimerRef.current);
+        flashTimerRef.current = null;
+      }
+    };
+  }, []);
+
   /** Drop a one-off status message in the toolbar for `ms` milliseconds. */
   const flashMsg = (text: string, ms = 1800) => {
+    if (flashTimerRef.current !== null) {
+      window.clearTimeout(flashTimerRef.current);
+    }
     setShareMsg(text);
-    window.setTimeout(() => setShareMsg(null), ms);
+    flashTimerRef.current = window.setTimeout(() => {
+      setShareMsg(null);
+      flashTimerRef.current = null;
+    }, ms);
   };
 
   const getCanvasBlob = async (): Promise<Blob | null> => {
@@ -487,6 +510,10 @@ export function OsdCanvas() {
     setDrag(null);
   };
 
+  // ⚠ Hook rule: all useState / useRef / useEffect / useComputed calls MUST
+  // happen above this early return. Adding a hook below this line without
+  // moving this return into the JSX tree will break the rules-of-hooks order
+  // when the empty-state path is taken.
   if (!hasLayers.value) {
     return <EmptyOsdState mode={mode.value} />;
   }

@@ -33,6 +33,14 @@ export interface McmLoadOptions {
   glyphColor?: HexColor | string;
   /** Replace the MCM's black outline with this hex. Defaults to black. */
   outlineColor?: HexColor | string;
+  /**
+   * Called for each glyph that has at least one malformed line (wrong
+   * length, missing, etc.). The glyph is still returned with missing
+   * pixels rendered as chroma-gray, but the callback lets the UI tell
+   * the user the font was only partially parsed instead of silently
+   * shipping a broken MCM.
+   */
+  onMalformed?: (code: number) => void;
 }
 
 /**
@@ -67,8 +75,14 @@ export function parseMcmNative(text: string, opts: McmLoadOptions = {}): TileMap
   for (let code = 0; idx + code * 64 < lines.length; code++) {
     const base = idx + code * 64;
     if (base + 54 > lines.length) break;
-    const tile = parseGlyphNative(lines, base, glyphRgb, outlineRgb);
-    if (tile) tiles.set(code, tile);
+    let malformedLines = 0;
+    const tile = parseGlyphNative(lines, base, glyphRgb, outlineRgb, () => {
+      malformedLines++;
+    });
+    if (tile) {
+      tiles.set(code, tile);
+      if (malformedLines > 0 && opts.onMalformed) opts.onMalformed(code);
+    }
   }
   return tiles;
 }
@@ -78,6 +92,7 @@ function parseGlyphNative(
   base: number,
   glyphRgb: readonly [number, number, number],
   outlineRgb: readonly [number, number, number],
+  onMalformedLine: () => void,
 ): Tile | null {
   // 12×18 analog pixel buffer, 3 bytes per pixel.
   const mcm = new Uint8ClampedArray(MCM_GLYPH_SIZE.w * MCM_GLYPH_SIZE.h * 3);
@@ -89,7 +104,10 @@ function parseGlyphNative(
       const raw = lines[base + row * 3 + subLine];
       if (raw === undefined) return null;
       const line = raw.trim();
-      if (line.length < 8) continue; // malformed line — skip pixels
+      if (line.length < 8) {
+        onMalformedLine();
+        continue; // malformed line — skip pixels, leave chroma-gray
+      }
       for (let i = 0; i < 8; i += 2) {
         const bits = line.slice(i, i + 2);
         const pxX = subLine * 4 + i / 2;

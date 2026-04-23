@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-04-23 — Polish pass: races, a11y, error surfaces
+
+A bug-hunt + polish release driven by six parallel codebase audits (dead code, mode-switch bugs, perf hotspots, a11y, UX consistency, data integrity, type safety, resource cleanup). 23 issues fixed in one batch; no new features.
+
+### Fixed — real bugs
+
+- **`useResolvedAssets` race on mode toggle** — single `cancelled` flag was per-mount, so two concurrent runs could race and the loser's `state.assets.value =` would still land. Replaced with a per-run generation token; older runs now check `isStale()` before writing. Toggling mode rapidly while a previous async resolve is in flight no longer leaves stale tiles in the atlas.
+- **Pixel editor save closure race** — if the modal closed (Esc / cancel) or the user changed glyph selection while the PNG-encode + putAsset chain was in flight, the later `mutate()` would land an override on a stale glyph code. Snapshot of `{open, code, mode}` taken at save start; chain bails if any of those have shifted by completion.
+- **Autosave hydration race window** — `hydrated = true` flag lived in a `finally` block that ran *after* `replaceProject()` triggered the autosave effect, producing a brief window where the first effect-run saw `hydrated=false`, bailed, then the next run saved redundantly. Flag now flips before `replaceProject()`.
+- **OsdCanvas flashMsg setTimeout leaks** — repeated copy/download flashes stacked uncancelled timers and fired against unmounted components. Timer is now tracked in a ref and cleared on next flash + on unmount.
+- **`decodeImageToRgba` ImageBitmap leak on throw** — image decode threw between `createImageBitmap` and the return path, leaking GPU memory each time. Wrapped in try/finally with `bmp.close()`.
+- **PixelEditor OffscreenCanvas ref retention** — source-buffer ref held an OffscreenCanvas across modal close until GC swept it. Cleared on unmount.
+
+### Added — error surface for storage failures
+
+- New persistent amber banner (`PersistenceErrorBanner` in AppShell) backed by a `persistenceError` signal in ui-state. Surfaces three previously-silent failure modes:
+  - **Autosave failure** — banner reads "Auto-save failed — your changes may not survive a page reload" with the underlying error message. Cleared on next successful save.
+  - **Storage quota exceeded** — DOMException with `QuotaExceededError` name produces a specific banner: "Browser storage is full — clear unused assets or your browser's site data."
+  - **IndexedDB unavailable** (private browsing, blocked storage) — `hydrateFromPersistence` catches and surfaces "Can't access browser storage — your work will not persist across page reloads." App keeps working in-memory-only instead of crashing on startup.
+- Banner is dismissible via × button; reappears on the next failure.
+
+### Changed — UX consistency
+
+- **`alert()` calls replaced with inline errors** in 4 sites (LayersPanel base-drop reject + sample-load + override-code validation, DecorationPage logo save, ElementLibrary FPV preset fetch, InspectorPanel pixel-editor save). Dialogs no longer block the user mid-flow; errors render inline near the action that triggered them.
+- **TtfLayerForm Save button** now reads "Storing…" and is disabled while the asset-store roundtrip is in flight (was disabled-without-feedback, looked like nothing happened).
+- **Button "secondary" disabled state** — used to collapse to the same bg as active, so disabled Undo/Redo buttons looked clickable. Now visibly muted (darker bg, lower opacity).
+- **MCM parse reports malformed glyphs** — partial/corrupted lines used to be silently skipped; now `parseMcmNative` accepts an `onMalformed` callback and `useResolvedAssets` surfaces the count via the layer-error pill ("N glyphs had malformed lines — some pixels may render as transparent").
+
+### Accessibility
+
+- **PixelEditor focus trap** — modal moves focus inward on open, traps Tab/Shift-Tab inside, restores focus to the trigger on close. `role="dialog"` + `aria-modal="true"` + `aria-label`. Closes the biggest a11y gap from the v0.3.1 editor ship.
+- **Aria-labels on icon-only buttons** swept across the app: pixel editor (close, color swatches, shade buttons, recent colors), LayersPanel (move up/down, edit, delete, override delete), ElementLibrary (clear selection), ModeToggle (HDZero/Analog with mode-pressed state).
+- **Visible focus rings** on every interactive element via `focus-visible:ring-2`. TabBar, ModeToggle, raw `<button>`s in PixelEditor, FileDrop. The shared Button component already had them; this catches the bypass cases.
+- **TabBar `aria-current="page"`** for screen-reader tab identification.
+- **FileDrop is now keyboard-activatable** — converted from `<div onClick>` to `<button type="button">` with the hidden file input excluded from the tab order. Drag-and-drop still works.
+
+### Schema / type safety
+
+- **IDB + JSON shape validation** before casting in `persistence.ts`, `project-persist.ts`, `assets.ts`. Previously `as Partial<X>` casts succeeded for any object; now runtime guards check the critical fields exist with the right types and reject malformed records with a clear message instead of crashing downstream. Cross-realm-safe duck typing for ArrayBuffer-like values (works in fake-indexeddb tests too).
+
+### Cleanup
+
+- Removed dead import in `BitmapLayerForm.tsx` (`addSampleFontAsBaseLayer` + `void` statement that "kept it imported for future use" the future never came).
+- Updated 3 stale comments referencing v0.1.0 / v0.2.x scope on code that's now mode-aware and at v0.3.x.
+- Documented `meta.rngSeed` and `decorations` as **intentionally shared** across modes (not per-mode-archived) — encoded in the schema comments so future audits don't try to "fix" it.
+- Added hook-order constraint comments above the empty-state early returns in FontPreview/OsdCanvas to flag the rules-of-hooks edge case for future devs.
+- `BlobPart` cast in AppShell download path documented as load-bearing (Uint8Array's backing buffer can theoretically be SharedArrayBuffer per strict TS types — the cast suppresses that, not a code smell).
+
+### Tests
+
+- 201 tests, all green. No new tests added (audit + fix release, not new functionality).
+
+### Bumped
+
+- `package.json` version `0.3.1` → `0.3.2`.
+
 ## [0.3.1] - 2026-04-22 — In-browser pixel editor
 
 ### Added — Pixel editor

@@ -51,9 +51,20 @@ const state: ResolvedAssetsState = {
  */
 export function useResolvedAssets(): ResolvedAssetsState {
   useEffect(() => {
-    let cancelled = false;
+    // Each run() bumps `gen`. In-flight runs capture their myGen at start
+    // and check isStale() before writing — this prevents races when the
+    // user toggles mode (or rapidly mutates) while a previous async resolve
+    // is still processing. Previously a single `cancelled` flag only
+    // covered component unmount, so two concurrent runs could both write
+    // to state.assets and whichever finished last would win — potentially
+    // the wrong mode's tiles.
+    let gen = 0;
+    let disposed = false;
 
     const run = async (doc: ProjectDoc) => {
+      const myGen = ++gen;
+      const isStale = (): boolean => disposed || myGen !== gen;
+
       state.loading.value = true;
       state.error.value = null;
       const errs: Record<string, string> = {};
@@ -64,34 +75,34 @@ export function useResolvedAssets(): ResolvedAssetsState {
         await loadMcmLayers(doc, next, errs);
         await loadLogoLayers(doc, next, errs);
         await loadOverrideTiles(doc, next);
-        if (!cancelled) {
+        if (!isStale()) {
           state.assets.value = next;
           state.layerErrors.value = errs;
         }
-        await syncBgImage(doc, cancelled);
+        await syncBgImage(doc, isStale);
       } catch (err) {
-        if (!cancelled) {
+        if (!isStale()) {
           state.error.value = err instanceof Error ? err.message : String(err);
         }
       } finally {
-        if (!cancelled) state.loading.value = false;
+        if (!isStale()) state.loading.value = false;
       }
     };
 
-    const syncBgImage = async (doc: ProjectDoc, wasCancelled: boolean) => {
+    const syncBgImage = async (doc: ProjectDoc, isStale: () => boolean) => {
       const ref = doc.osdLayout.background;
       if (!ref || ref.kind !== "user") {
-        if (!wasCancelled) {
+        if (!isStale()) {
           state.bgImage.value?.close?.();
           state.bgImage.value = null;
         }
         return;
       }
       const rec = await getAsset(ref.hash);
-      if (!rec || wasCancelled) return;
+      if (!rec || isStale()) return;
       const blob = new Blob([rec.bytes], { type: rec.mime });
       const bitmap = await createImageBitmap(blob);
-      if (wasCancelled) {
+      if (isStale()) {
         bitmap.close();
         return;
       }
@@ -105,7 +116,7 @@ export function useResolvedAssets(): ResolvedAssetsState {
     });
 
     return () => {
-      cancelled = true;
+      disposed = true;
       dispose();
     };
   }, []);
@@ -202,9 +213,11 @@ async function loadMcmLayers(
     }
     try {
       const text = new TextDecoder().decode(rec.bytes);
+      const malformed: number[] = [];
       const tiles = parse(text, {
         glyphColor: isAnalog ? "#ffffff" : layer.glyphColor,
         outlineColor: isAnalog ? "#000000" : layer.outlineColor,
+        onMalformed: (code) => malformed.push(code),
       });
       if (tiles.size === 0) {
         errs[layer.id] =
@@ -212,6 +225,13 @@ async function loadMcmLayers(
         continue;
       }
       out.mcm.set(layer.id, tiles);
+      if (malformed.length > 0) {
+        // Non-fatal: the glyphs are still returned, just with some pixels
+        // dropped to chroma-gray where source lines were too short. Flag
+        // it so the pilot knows their font may render with gaps.
+        errs[layer.id] =
+          `${malformed.length} glyph${malformed.length === 1 ? "" : "s"} had malformed lines — some pixels may render as transparent. Source .mcm may be corrupted.`;
+      }
     } catch (err) {
       errs[layer.id] = err instanceof Error ? err.message : String(err);
     }
@@ -360,17 +380,23 @@ async function decodeImageToRgba(
     }
     return { width: rgb.width, height: rgb.height, data: rgba };
   }
-  // PNG / JPG / others: decode via Canvas.
+  // PNG / JPG / others: decode via Canvas. The bitmap holds GPU memory —
+  // close it in finally so exceptions mid-decode (tainted canvas, OOM,
+  // etc.) don't leak.
   const blob = new Blob([bytes], { type: mime });
   const bmp = await createImageBitmap(blob);
-  const canvas = new OffscreenCanvas(bmp.width, bmp.height);
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-  ctx.drawImage(bmp, 0, 0);
-  const img = ctx.getImageData(0, 0, bmp.width, bmp.height);
-  return {
-    width: img.width,
-    height: img.height,
-    data: new Uint8ClampedArray(img.data.buffer),
-  };
+  try {
+    const canvas = new OffscreenCanvas(bmp.width, bmp.height);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(bmp, 0, 0);
+    const img = ctx.getImageData(0, 0, bmp.width, bmp.height);
+    return {
+      width: img.width,
+      height: img.height,
+      data: new Uint8ClampedArray(img.data.buffer),
+    };
+  } finally {
+    bmp.close();
+  }
 }

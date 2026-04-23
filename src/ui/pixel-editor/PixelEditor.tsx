@@ -101,6 +101,7 @@ export function PixelEditor({
   const sourceBufferRef = useRef<OffscreenCanvas | null>(null);
   const drawingRef = useRef<boolean>(false);
   const lastCellRef = useRef<{ x: number; y: number } | null>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   const displayW = width * zoom;
   const displayH = height * zoom;
@@ -174,6 +175,58 @@ export function PixelEditor({
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onCancel]);
+
+  // Release the lazily-allocated OffscreenCanvas on unmount so GPU memory
+  // doesn't linger across modal open/close cycles until GC catches up.
+  useEffect(() => {
+    return () => {
+      sourceBufferRef.current = null;
+    };
+  }, []);
+
+  // Focus trap: on mount, move focus into the modal and cycle Tab / Shift-Tab
+  // inside it. On unmount, restore focus to the element that opened the
+  // modal (usually the Draw button). Keeps keyboard users inside the modal
+  // instead of silently tabbing out to elements behind the backdrop.
+  useEffect(() => {
+    const modal = modalRef.current;
+    if (!modal) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const FOCUSABLE =
+      'button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+    const findFocusables = (): HTMLElement[] =>
+      Array.from(modal.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+        (el) => !el.hasAttribute("aria-hidden"),
+      );
+
+    // Initial focus — first focusable inside the modal.
+    const initial = findFocusables()[0];
+    if (initial) initial.focus();
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const focusables = findFocusables();
+      if (focusables.length === 0) return;
+      const first = focusables[0]!;
+      const last = focusables[focusables.length - 1]!;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      if (previouslyFocused && document.contains(previouslyFocused)) {
+        previouslyFocused.focus();
+      }
+    };
+  }, []);
 
   const pointerToCell = (e: PointerEvent): { x: number; y: number } | null => {
     const canvas = canvasRef.current;
@@ -291,6 +344,10 @@ export function PixelEditor({
         slider. Canvas area inside scrolls when the content exceeds it.
       */}
       <div
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Pixel editor: ${title}`}
         class="bg-slate-900 border border-slate-700 rounded-lg shadow-xl flex flex-col overflow-hidden"
         style={{
           width: "min(90vw, 1200px)",
@@ -306,7 +363,8 @@ export function PixelEditor({
           </h2>
           <button
             onClick={onCancel}
-            class="text-slate-500 hover:text-slate-200 text-lg font-mono px-2"
+            aria-label="Close pixel editor (Esc)"
+            class="text-slate-500 hover:text-slate-200 text-lg font-mono px-2 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500"
             title="Cancel (Esc)"
           >
             ×
@@ -420,9 +478,11 @@ function ToolPicker({ tool, onPick }: { tool: Tool; onPick: (t: Tool) => void })
         <button
           key={t.id}
           onClick={() => onPick(t.id)}
+          aria-pressed={tool === t.id}
           title={t.hint}
           class={[
             "px-2 py-1 rounded text-left transition-colors",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-osd-mint",
             tool === t.id
               ? "bg-osd-mint text-slate-900 font-semibold"
               : "bg-slate-800 text-slate-300 hover:bg-slate-700",
@@ -483,7 +543,7 @@ function Palette({
       </div>
       <button
         onClick={() => onPickColor([127, 127, 127])}
-        class="px-2 py-1 rounded text-left text-[10px] bg-slate-800 text-slate-300 hover:bg-slate-700"
+        class="px-2 py-1 rounded text-left text-[10px] bg-slate-800 text-slate-300 hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500"
         title="Set color to chroma-gray (transparent-on-goggle)"
       >
         Transparent (chroma-gray)
@@ -496,7 +556,8 @@ function Palette({
             <button
               key={p.label}
               onClick={() => onPickColor(p.rgb)}
-              class="w-5 h-5 border border-slate-600 rounded-sm"
+              aria-label={`${p.label} (${rgbToHex(p.rgb)})`}
+              class="w-5 h-5 border border-slate-600 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-osd-mint"
               style={{ background: `rgb(${p.rgb[0]},${p.rgb[1]},${p.rgb[2]})` }}
               title={p.label}
             />
@@ -516,8 +577,9 @@ function Palette({
               <button
                 key={delta}
                 onClick={() => onPickColor(shade)}
+                aria-label={`Shade ${delta >= 0 ? "+" : ""}${delta}% (${rgbToHex(shade)})`}
                 class={[
-                  "flex-1 h-6 border rounded-sm",
+                  "flex-1 h-6 border rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-osd-mint",
                   active ? "border-osd-mint" : "border-slate-600",
                 ].join(" ")}
                 style={{ background: `rgb(${shade[0]},${shade[1]},${shade[2]})` }}
@@ -536,7 +598,8 @@ function Palette({
               <button
                 key={i}
                 onClick={() => onPickColor(rgb)}
-                class="w-5 h-5 border border-slate-600 rounded-sm"
+                aria-label={`Recent color ${rgbToHex(rgb)}`}
+                class="w-5 h-5 border border-slate-600 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-osd-mint"
                 style={{ background: `rgb(${rgb[0]},${rgb[1]},${rgb[2]})` }}
                 title={rgbToHex(rgb)}
               />
@@ -645,8 +708,10 @@ function ColorButton({
   return (
     <button
       onClick={() => onPick(rgb)}
+      aria-pressed={active}
       class={[
         "flex items-center gap-2 px-2 py-1 rounded transition-colors text-left",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-osd-mint",
         active ? "bg-osd-mint text-slate-900 font-semibold" : "bg-slate-800 text-slate-300 hover:bg-slate-700",
       ].join(" ")}
     >

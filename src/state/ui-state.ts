@@ -24,3 +24,13 @@ export const fontPreviewZoom = signal<{ hd: number | null; analog: number | null
   hd: null,
   analog: null,
 });
+
+/**
+ * Persistence / storage error surface. Non-null = the app has had trouble
+ * writing to or reading from IndexedDB and the user should know their work
+ * might not survive. AppShell renders a persistent banner when this is set;
+ * the various error paths (autosave catch, putAsset quota failure, IDB
+ * unavailable in private browsing) set the message from their perspective.
+ * Cleared on the next successful persist so transient hiccups self-heal.
+ */
+export const persistenceError = signal<string | null>(null);

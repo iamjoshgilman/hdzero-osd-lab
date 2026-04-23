@@ -6,7 +6,7 @@ import {
   installAutoSave,
 } from "@/state/autosave";
 import { emptyFontSlice } from "@/state/project";
-import { currentView } from "@/state/ui-state";
+import { currentView, persistenceError } from "@/state/ui-state";
 import { compose } from "@/compositor/compose";
 import { writeBmp24 } from "@/encoders/bmp";
 import { writeMcm } from "@/encoders/mcm";
@@ -92,6 +92,10 @@ export function AppShell() {
     }
     // HD: write a 384×1152 BMP named BTFL_000.bmp per HDZero's SD-card convention.
     const bytes = writeBmp24({ width: FONT_SIZE.w, height: FONT_SIZE.h, data: atlas });
+    // `as unknown as BlobPart` bypasses a strict-TS check: Uint8Array's
+    // backing buffer could theoretically be SharedArrayBuffer, which isn't
+    // a BlobPart. In practice writeBmp24 always uses ArrayBuffer; the cast
+    // is load-bearing against strict TS, not a code smell to clean up.
     const blob = new Blob([bytes as unknown as BlobPart], { type: "image/bmp" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -112,6 +116,7 @@ export function AppShell() {
         mode={mode.value}
       />
       <TabBar />
+      <PersistenceErrorBanner />
       <main class="flex flex-1 overflow-hidden">
         {/* LayersPanel pinned left on project-editing tabs; hidden on Resources and
             How-To (both read-only content). */}
@@ -172,6 +177,32 @@ function TopBar({
         </Button>
       </div>
     </header>
+  );
+}
+
+/**
+ * Persistent amber banner shown across the top when something's wrong with
+ * browser storage — autosave failed, IDB blocked (private browsing), or
+ * quota exceeded. Dismissible; re-appears on the next failure.
+ */
+function PersistenceErrorBanner() {
+  const err = useComputed(() => persistenceError.value);
+  if (!err.value) return null;
+  return (
+    <div
+      role="alert"
+      class="border-b border-osd-amber/50 bg-osd-amber/10 px-4 py-2 text-[12px] text-osd-amber font-mono flex items-start justify-between gap-4"
+    >
+      <span class="leading-snug flex-1">⚠ {err.value}</span>
+      <button
+        onClick={() => (persistenceError.value = null)}
+        aria-label="Dismiss persistence warning"
+        title="Dismiss"
+        class="text-osd-amber/70 hover:text-osd-amber shrink-0 px-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-osd-amber"
+      >
+        ×
+      </button>
+    </div>
   );
 }
 

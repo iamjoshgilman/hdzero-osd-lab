@@ -3,6 +3,7 @@
 // entry's name sets `selectedOsdElement`, which the canvas highlights.
 
 import { useComputed } from "@preact/signals";
+import { useState } from "preact/hooks";
 import { project, mutate } from "@/state/store";
 import { putAsset } from "@/state/assets";
 import { selectedOsdElement } from "@/state/ui-state";
@@ -125,6 +126,15 @@ function enableAll(enabled: boolean): void {
 }
 
 function BgPresetPicker() {
+  const [err, setErr] = useState<string | null>(null);
+  const pick = async (p: BgPreset) => {
+    setErr(null);
+    try {
+      await loadBgPreset(p);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+  };
   return (
     <div class="mt-2 flex flex-col gap-1">
       <p class="text-[10px] text-slate-500">or pick a preset:</p>
@@ -133,7 +143,7 @@ function BgPresetPicker() {
           <Button
             key={p.file}
             variant="secondary"
-            onClick={() => loadBgPreset(p)}
+            onClick={() => void pick(p)}
             class="!px-2 !py-1 !text-[10px]"
           >
             {p.label}
@@ -144,6 +154,11 @@ function BgPresetPicker() {
         Presets read files from <code>public/fpv-backgrounds/</code>. Generate your own AI
         stills using the prompts in the README there.
       </p>
+      {err && (
+        <p class="text-[10px] text-osd-alert leading-snug mt-1" role="alert">
+          ⚠ {err}
+        </p>
+      )}
     </div>
   );
 }
@@ -162,8 +177,10 @@ function SelectedElementPanel() {
       <header class="flex items-center justify-between">
         <h3 class="text-[11px] text-osd-mint font-semibold">{element.label}</h3>
         <button
-          class="text-slate-500 hover:text-slate-300 text-[10px]"
+          class="text-slate-500 hover:text-slate-300 text-[10px] rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500"
           onClick={() => (selectedOsdElement.value = null)}
+          aria-label="Clear element selection"
+          title="Clear selection"
         >
           clear
         </button>
@@ -277,12 +294,12 @@ async function loadBgPreset(preset: BgPreset): Promise<void> {
   const url = `${import.meta.env.BASE_URL}fpv-backgrounds/${preset.file}`;
   const res = await fetch(url);
   if (!res.ok) {
-    alert(
-      `Preset "${preset.label}" not found at ${url}.\n\n` +
-        `Generate an image with a prompt like:\n\n${preset.prompt}\n\n` +
-        `Save it as "${preset.file}" inside public/fpv-backgrounds/ and refresh.`,
+    // Throw with a compact message; the BgPresetPicker catches and renders
+    // inline. Full instructional prompt moved to README.md in the
+    // public/fpv-backgrounds/ folder so the UI stays uncluttered.
+    throw new Error(
+      `Preset "${preset.label}" not found. Generate the image and save it as ${preset.file} in public/fpv-backgrounds/ (README there has the prompt).`,
     );
-    return;
   }
   const blob = await res.blob();
   const file = new File([blob], preset.file, { type: blob.type });

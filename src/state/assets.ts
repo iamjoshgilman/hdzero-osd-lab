@@ -68,16 +68,40 @@ export async function putAsset(
   return hash;
 }
 
-/** Read a blob by hash. Returns null if absent. */
+/**
+ * Shape guard for a StoredAsset record read back from IndexedDB. The
+ * `bytes` check uses duck typing (byteLength is a number) rather than
+ * `instanceof ArrayBuffer` because cross-realm IDB reads — especially
+ * under fake-indexeddb in tests — can hand back ArrayBuffer-like values
+ * whose constructor lives in a different realm and fails instanceof.
+ */
+function isStoredAsset(raw: unknown): raw is StoredAsset {
+  if (typeof raw !== "object" || raw === null) return false;
+  const r = raw as Partial<StoredAsset>;
+  return (
+    typeof r.hash === "string" &&
+    typeof r.name === "string" &&
+    typeof r.mime === "string" &&
+    typeof r.addedAt === "string" &&
+    r.bytes !== undefined &&
+    r.bytes !== null &&
+    typeof (r.bytes as ArrayBuffer).byteLength === "number"
+  );
+}
+
+/** Read a blob by hash. Returns null if absent or malformed. */
 export async function getAsset(
   hash: string,
 ): Promise<{ bytes: ArrayBuffer; name: string; mime: string } | null> {
   const db = await openDb();
   try {
     return await getPromise(db, (store) => store.get(hash)).then((raw) => {
-      const rec = raw as StoredAsset | undefined;
-      if (!rec) return null;
-      return { bytes: rec.bytes, name: rec.name, mime: rec.mime };
+      if (!raw) return null;
+      if (!isStoredAsset(raw)) {
+        console.warn("asset record has unexpected shape, skipping:", hash);
+        return null;
+      }
+      return { bytes: raw.bytes, name: raw.name, mime: raw.mime };
     });
   } finally {
     db.close();
@@ -96,21 +120,22 @@ export async function deleteAsset(hash: string): Promise<void> {
   }
 }
 
-/** List every stored asset's metadata (without loading bytes). */
+/** List every stored asset's metadata (without loading bytes). Malformed records are skipped. */
 export async function listAssets(): Promise<
   Array<{ hash: string; name: string; mime: string; addedAt: string; size: number }>
 > {
   const db = await openDb();
   try {
-    const out = await getPromise(db, (store) => store.getAll()).then((records) =>
-      (records as StoredAsset[]).map((r) => ({
+    const out = await getPromise(db, (store) => store.getAll()).then((records) => {
+      if (!Array.isArray(records)) return [];
+      return records.filter(isStoredAsset).map((r) => ({
         hash: r.hash,
         name: r.name,
         mime: r.mime,
         addedAt: r.addedAt,
         size: r.bytes.byteLength,
-      })),
-    );
+      }));
+    });
     return out;
   } finally {
     db.close();
@@ -129,8 +154,9 @@ export async function evictUnused(keep: Set<string>): Promise<number> {
       cursorReq.onsuccess = () => {
         const cursor = cursorReq.result;
         if (!cursor) return;
-        const rec = cursor.value as StoredAsset;
-        if (!keep.has(rec.hash)) {
+        // Malformed records get deleted unconditionally — they're
+        // unusable anyway and shouldn't keep cluttering the store.
+        if (!isStoredAsset(cursor.value) || !keep.has(cursor.value.hash)) {
           cursor.delete();
           deleted++;
         }

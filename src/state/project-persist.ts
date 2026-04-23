@@ -57,10 +57,21 @@ export async function savePersistedProject(doc: ProjectDoc): Promise<void> {
   }
 }
 
+function isStoredProject(raw: unknown): raw is StoredProject {
+  return (
+    typeof raw === "object" &&
+    raw !== null &&
+    typeof (raw as StoredProject).key === "string" &&
+    typeof (raw as StoredProject).json === "string" &&
+    typeof (raw as StoredProject).savedAt === "string"
+  );
+}
+
 /**
- * Read the last-saved project back. Returns null if the store is empty or
- * the JSON is unparseable (we prefer falling back to bootstrap over crashing
- * the app on startup for a single corrupt record).
+ * Read the last-saved project back. Returns null if the store is empty, the
+ * stored record has the wrong shape, or the JSON is unparseable (we prefer
+ * falling back to bootstrap over crashing the app on startup for a single
+ * corrupt record).
  */
 export async function loadPersistedProject(): Promise<ProjectDoc | null> {
   const db = await openDb();
@@ -72,9 +83,15 @@ export async function loadPersistedProject(): Promise<ProjectDoc | null> {
       req.onerror = () => reject(req.error);
     });
     if (!raw) return null;
-    const record = raw as StoredProject;
+    if (!isStoredProject(raw)) {
+      console.warn(
+        "persisted project record has unexpected shape, discarding:",
+        raw,
+      );
+      return null;
+    }
     try {
-      return projectFromJson(record.json);
+      return projectFromJson(raw.json);
     } catch (err) {
       console.warn("persisted project failed to parse, discarding:", err);
       return null;

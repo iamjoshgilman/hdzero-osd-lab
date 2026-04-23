@@ -20,8 +20,11 @@ export function ModeToggle() {
     return (
       <button
         onClick={() => set(m)}
+        aria-pressed={active}
+        aria-label={`${label} mode (${sub})`}
         class={[
           "flex-1 flex flex-col items-start px-3 py-2 rounded transition-colors font-mono",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-osd-mint",
           active
             ? "bg-osd-mint text-slate-900"
             : "text-slate-400 hover:text-slate-200 hover:bg-slate-800",
@@ -39,7 +42,11 @@ export function ModeToggle() {
   };
 
   return (
-    <div class="flex gap-1 rounded border border-slate-700 bg-slate-900 p-1">
+    <div
+      class="flex gap-1 rounded border border-slate-700 bg-slate-900 p-1"
+      role="group"
+      aria-label="OSD target mode"
+    >
       {btn("hd", "HDZero", "digital · 53×20 · .bmp")}
       {btn("analog", "Analog", "MAX7456 · 30×16 · .mcm")}
     </div>

@@ -26,7 +26,15 @@ export interface ProjectDoc {
     createdAt: string;
     /** ISO 8601. */
     updatedAt: string;
-    /** Null = unseeded (each compose() shuffles palettes fresh). Number = deterministic. */
+    /**
+     * Null = unseeded (each compose() shuffles palettes fresh). Number =
+     * deterministic.
+     *
+     * Intentionally **shared across modes**, not archived — rngSeed only
+     * affects HD TTF palette layers (analog TTFs render monochrome without
+     * palette randomness). Per-mode archival would add state for zero
+     * user-visible benefit.
+     */
     rngSeed: number | null;
     /** Target OSD platform. See OsdMode. */
     mode: OsdMode;
@@ -87,6 +95,14 @@ export interface ProjectDoc {
     /** Optional FPV still-frame rendered behind the OSD preview. */
     background?: AssetRef;
   };
+  /**
+   * Legacy decoration payloads (the original Phase 3 "Decoration Generator"
+   * concept that got deferred in favor of the v0.3.0 analog mode pivot).
+   * Currently unused by any UI but kept in the schema for forward-compat.
+   * Intentionally **shared across modes** — decorations are freeform
+   * Craft Name / warning-string payloads that the goggle renders with
+   * whatever font is active, so there's no per-mode state to preserve.
+   */
   decorations: {
     craftName: CraftNameDecoration;
     stats: StatsDecoration[];

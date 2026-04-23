@@ -86,6 +86,10 @@ export function FontPreview() {
     fontPreviewZoom.value = { ...fontPreviewZoom.value, [mode.value]: v };
   };
 
+  // ⚠ Hook rule: all useState / useRef / useEffect / useComputed calls MUST
+  // happen above this early return. Adding a hook below this line without
+  // moving this return into the JSX tree will break the rules-of-hooks order
+  // when the empty-state path is taken.
   if (!hasLayers.value) {
     return <EmptyFontState mode={mode.value} />;
   }

@@ -99,6 +99,9 @@ function GlyphDetails({
   savedRef.current = { open: editorOpen, code, mode };
   const dims = tileDimsForMode(mode);
 
+  // Glyph-tile editor ignores the `meta.modified` flag — any save intent
+  // for an override slot results in a write, even if the user hit Save
+  // without drawing (effectively confirming the current state).
   const handleSaveTile = async (newPixels: Uint8ClampedArray): Promise<void> => {
     // Snapshot the identity of this save at the moment it starts — code,
     // mode, and "modal is still open" — so the async chain can check at

@@ -12,6 +12,7 @@ import {
   mutateLive,
   beginEditSession,
   commitEditSession,
+  rollbackEditSession,
 } from "@/state/store";
 import { putAsset } from "@/state/assets";
 import { FileDrop } from "@/ui/shared/FileDrop";
@@ -30,11 +31,11 @@ interface LogoSlotSpec {
   renderedAt: Record<OsdMode, string>;
   purpose: string;
   /**
-   * Whether the in-browser pixel editor gets offered for this slot. BTFL
-   * banner is 576×144 (or 288×72 analog) — legitimately too big to draw
-   * pixel-by-pixel in-browser without proper zoom/pan/selection UX. Image
-   * upload covers it well. Mini-logo at 120×36 / 60×18 is small enough
-   * that in-browser drawing is practical.
+   * Both slots are now drawable. Historically BTFL (576×144 / 288×72) was
+   * gated off because editing that many pixels in-browser was awkward
+   * without zoom + pan; those landed in v0.3.5-v0.3.8, so banner editing
+   * is viable — zoom the editor up, scroll around, paint. Kept as a field
+   * (not a constant) so we can revisit if a future slot ships read-only.
    */
   drawable: boolean;
 }
@@ -59,7 +60,7 @@ const LOGO_SLOTS: readonly LogoSlotSpec[] = [
     },
     purpose:
       "The big BETAFLIGHT-style banner. 96 tiles wrapped into glyph codes 160..255. HD firmware auto-draws via SYM_LOGO; analog pilots trigger display manually via Craft Name / Warnings.",
-    drawable: false,
+    drawable: true,
   },
   {
     slot: "mini",
@@ -320,94 +321,6 @@ const LOGO_SCALE_MIN = 0.5;
 const LOGO_SCALE_MAX = 3.0;
 const LOGO_SCALE_STEP = 0.05;
 
-/**
- * Scale slider + readout + reset for a logo layer. Uses the same
- * edit-session pattern as the override scale slider (snapshot on first
- * drag tick, mutateLive per input, commit on pointer release), so a drag
- * is one undo entry instead of 50.
- */
-function LogoScaleEditor({ layer }: { layer: LogoLayer }) {
-  const sessionSnapshotRef = useRef<ProjectDoc | null>(null);
-  const current = layer.scale ?? 1.0;
-
-  const writeScale = (v: number) => {
-    const clamped = Math.max(LOGO_SCALE_MIN, Math.min(LOGO_SCALE_MAX, v));
-    if (!sessionSnapshotRef.current) {
-      sessionSnapshotRef.current = beginEditSession();
-    }
-    mutateLive((doc) => {
-      const target = doc.font.layers.find((l) => l.id === layer.id);
-      if (!target || target.kind !== "logo") return;
-      // Omit `scale: 1` from the doc so projects without a user scale
-      // round-trip cleanly through JSON export.
-      if (clamped === 1) {
-        delete target.scale;
-      } else {
-        target.scale = clamped;
-      }
-    });
-  };
-
-  const commitDrag = () => {
-    if (sessionSnapshotRef.current) {
-      commitEditSession(sessionSnapshotRef.current);
-      sessionSnapshotRef.current = null;
-    }
-  };
-
-  const reset = () => {
-    if (!sessionSnapshotRef.current) {
-      sessionSnapshotRef.current = beginEditSession();
-    }
-    mutateLive((doc) => {
-      const target = doc.font.layers.find((l) => l.id === layer.id);
-      if (target && target.kind === "logo") delete target.scale;
-    });
-    commitDrag();
-  };
-
-  return (
-    <div class="bg-slate-800/60 border border-slate-800 rounded p-2 flex flex-col gap-1.5">
-      <div class="flex items-center justify-between">
-        <span class="text-[10px] font-mono text-slate-500 uppercase tracking-wider">
-          Scale
-        </span>
-        {current !== 1 && (
-          <button
-            onClick={reset}
-            class="text-slate-500 hover:text-osd-mint text-[10px] font-mono px-1"
-            title="Reset to fit (1.0×)"
-          >
-            reset
-          </button>
-        )}
-      </div>
-      <div class="flex items-center gap-2">
-        <input
-          type="range"
-          min={LOGO_SCALE_MIN}
-          max={LOGO_SCALE_MAX}
-          step={LOGO_SCALE_STEP}
-          value={current}
-          onInput={(e: Event) => writeScale(parseFloat((e.target as HTMLInputElement).value))}
-          onChange={commitDrag}
-          onPointerUp={commitDrag}
-          onBlur={commitDrag}
-          aria-label={`${layer.slot} logo scale`}
-          class="flex-1 accent-osd-mint"
-        />
-        <span class="text-slate-300 text-[11px] font-mono tabular-nums w-12 text-right">
-          {current.toFixed(2)}×
-        </span>
-      </div>
-      <p class="text-[10px] text-slate-500 leading-snug">
-        <span class="text-osd-amber">1.0×</span> fits the slot. Higher values
-        crop the logo's built-in padding; content past the slot edge clips.
-      </p>
-    </div>
-  );
-}
-
 function LogoSlotCard({ spec, mode }: { spec: LogoSlotSpec; mode: OsdMode }) {
   const layer = useComputed(() => findLogoLayerForSlot(spec.slot));
   const { assets } = useResolvedAssets();
@@ -420,25 +333,84 @@ function LogoSlotCard({ spec, mode }: { spec: LogoSlotSpec; mode: OsdMode }) {
   // drawing a 576-line pixel mesh on the banner canvas.
   const tileBoundary = mode === "analog" ? ANALOG_GLYPH_SIZE : GLYPH_SIZE;
 
+  // Live-edit session anchor — captured lazily on the first scale-slider
+  // movement inside the editor. Rolled back on Cancel; on Save we also roll
+  // back first when the user drew, so saveDrawnLogo's mutate() lands a clean
+  // single undo step back to pre-open state.
+  const sessionSnapshotRef = useRef<ProjectDoc | null>(null);
+
   const openEditor = () => {
     setSaveError(null);
     setEditorOpen(true);
   };
-  const closeEditor = () => setEditorOpen(false);
+  const closeEditor = () => {
+    sessionSnapshotRef.current = null;
+    setEditorOpen(false);
+  };
 
-  const handleSave = async (pixels: Uint8ClampedArray) => {
+  const handleScaleInput = (v: number) => {
+    const current = layer.value;
+    if (!current) return;
+    if (!sessionSnapshotRef.current) {
+      sessionSnapshotRef.current = beginEditSession();
+    }
+    const clamped = Math.max(LOGO_SCALE_MIN, Math.min(LOGO_SCALE_MAX, v));
+    mutateLive((doc) => {
+      const target = doc.font.layers.find((l) => l.id === current.id);
+      if (!target || target.kind !== "logo") return;
+      if (clamped === 1) delete target.scale;
+      else target.scale = clamped;
+    });
+  };
+
+  const handleScaleReset = () => {
+    const current = layer.value;
+    if (!current) return;
+    if (!sessionSnapshotRef.current) {
+      sessionSnapshotRef.current = beginEditSession();
+    }
+    mutateLive((doc) => {
+      const target = doc.font.layers.find((l) => l.id === current.id);
+      if (target && target.kind === "logo") delete target.scale;
+    });
+  };
+
+  const handleSave = async (pixels: Uint8ClampedArray, meta: { modified: boolean }) => {
     setSaveError(null);
     try {
-      await saveDrawnLogo(spec.slot, pixels, dims.w, dims.h);
+      if (meta.modified) {
+        // User drew over the rasterized view. Roll back the live scale
+        // session first so the pre-open state anchors the undo entry, then
+        // replace the layer with a PNG of the drawn pixels (scale=1 on the
+        // new layer since the drawing is already at slot size).
+        if (sessionSnapshotRef.current) {
+          rollbackEditSession(sessionSnapshotRef.current);
+          sessionSnapshotRef.current = null;
+        }
+        await saveDrawnLogo(spec.slot, pixels, dims.w, dims.h);
+      } else if (sessionSnapshotRef.current) {
+        // Scale-only save — commit the live changes as a single undo entry.
+        commitEditSession(sessionSnapshotRef.current);
+        sessionSnapshotRef.current = null;
+      }
       closeEditor();
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : String(err));
     }
   };
 
+  const handleCancel = () => {
+    if (sessionSnapshotRef.current) {
+      rollbackEditSession(sessionSnapshotRef.current);
+      sessionSnapshotRef.current = null;
+    }
+    closeEditor();
+  };
+
   // Seed the editor from the currently-resolved scaled logo image if a layer
-  // exists; otherwise blank chroma-gray. assets.logo contains the source
-  // aspect-fit scaled to slot dims — exactly what the editor wants.
+  // exists; otherwise blank chroma-gray. Re-evaluated on every render so a
+  // scale-slider mutateLive re-rasterization flows in as a fresh
+  // `initialPixels` buffer — the editor's reseed effect picks it up.
   const seedPixels = (): Uint8ClampedArray => {
     const current = layer.value;
     if (current) {
@@ -501,16 +473,14 @@ function LogoSlotCard({ spec, mode }: { spec: LogoSlotSpec; mode: OsdMode }) {
                 : layer.value.source.id}
             </span>
             <div class="flex gap-2">
-              {spec.drawable && (
-                <Button
-                  variant="secondary"
-                  onClick={openEditor}
-                  class="!px-3 !py-1 !text-[10px]"
-                  title="Open the pixel editor to tweak this logo in-place"
-                >
-                  ✎ Draw
-                </Button>
-              )}
+              <Button
+                variant="secondary"
+                onClick={openEditor}
+                class="!px-3 !py-1 !text-[10px]"
+                title="Open the editor — scale, paint, preview"
+              >
+                ✎ Edit
+              </Button>
               <FileDrop
                 accept="image/*"
                 label="Replace"
@@ -527,7 +497,6 @@ function LogoSlotCard({ spec, mode }: { spec: LogoSlotSpec; mode: OsdMode }) {
             </div>
           </div>
           <LogoPreview layerId={layer.value.id} dims={dims} />
-          <LogoScaleEditor layer={layer.value} />
         </div>
       ) : spec.drawable ? (
         <div class="flex flex-col gap-2">
@@ -558,7 +527,10 @@ function LogoSlotCard({ spec, mode }: { spec: LogoSlotSpec; mode: OsdMode }) {
         />
       )}
 
-      {editorOpen && spec.drawable && (
+      {editorOpen && (
+        // Only wire scaleControls when a layer exists (nothing to scale
+        // otherwise). Under exactOptionalPropertyTypes we can't pass
+        // `undefined` for an optional prop, so conditionally spread.
         <PixelEditor
           width={dims.w}
           height={dims.h}
@@ -566,8 +538,28 @@ function LogoSlotCard({ spec, mode }: { spec: LogoSlotSpec; mode: OsdMode }) {
           mode={mode}
           title={`${spec.label} · ${dims.w}×${dims.h}`}
           tileBoundary={tileBoundary}
+          // BTFL banner (drawable=false) opens in scale-and-preview mode.
+          // Mini-logo (drawable=true) opens with full paint tools.
+          toolsEnabled={spec.drawable}
+          {...(layer.value
+            ? {
+                scaleControls: {
+                  value: layer.value.scale ?? 1.0,
+                  min: LOGO_SCALE_MIN,
+                  max: LOGO_SCALE_MAX,
+                  step: LOGO_SCALE_STEP,
+                  onInput: handleScaleInput,
+                  // Intra-drag release is a no-op — the whole modal lifetime
+                  // is a single edit session, committed on Save or rolled
+                  // back on Cancel. Coalescing per-drag would push multiple
+                  // undo entries for one editor session.
+                  onCommit: () => {},
+                  onReset: handleScaleReset,
+                },
+              }
+            : {})}
           onSave={handleSave}
-          onCancel={closeEditor}
+          onCancel={handleCancel}
         />
       )}
     </section>

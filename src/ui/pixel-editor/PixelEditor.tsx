@@ -14,12 +14,11 @@ import { Button } from "@/ui/shared/Button";
 import {
   clonePixels,
   drawLine,
-  erasePixel,
+  stampBrush,
   floodFill,
   getPixel,
   parseHexRgb,
   rgbToHex,
-  setPixel,
   shadeColor,
   type Rgb,
 } from "./pixel-ops";
@@ -58,10 +57,29 @@ function defaultZoomFor(w: number, h: number): number {
   return Math.max(3, Math.min(8, Math.floor(1000 / long)));
 }
 
+/** Optional scale-slider controls, for callers that frame a source image. */
+export interface PixelEditorScaleControls {
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  /** Fired on every slider tick (live preview). Parent usually mutateLive-writes. */
+  onInput: (v: number) => void;
+  /** Fired on release / blur (commit). Parent usually commits its edit session. */
+  onCommit: () => void;
+  /** Fired when the user clicks the inline "reset" button. */
+  onReset?: () => void;
+}
+
 interface Props {
   width: number;
   height: number;
-  /** RGB buffer, length = width * height * 3. Cloned internally; caller keeps ownership. */
+  /**
+   * RGB buffer, length = width * height * 3. Cloned internally; caller keeps
+   * ownership. If the prop's IDENTITY changes (new reference) the editor
+   * reseeds from the new buffer and clears its undo/redo stacks — used by
+   * the logo editor when a scale-slider change re-rasterizes the source.
+   */
   initialPixels: Uint8ClampedArray;
   /** Drives the color-palette UX — "analog" limits to black/white/transparent. */
   mode: OsdMode;
@@ -74,7 +92,23 @@ interface Props {
    * boundaries instead of drawing 576 dense lines.
    */
   tileBoundary?: { w: number; h: number };
-  onSave: (pixels: Uint8ClampedArray) => void;
+  /**
+   * Hide paint tools / color palette / undo-redo-clear. Used by the BTFL
+   * banner editor where the canvas is too large (576×144) to edit
+   * pixel-by-pixel in-browser — the editor becomes a scale-and-preview
+   * surface. Defaults to true (full editing).
+   */
+  toolsEnabled?: boolean;
+  /** When provided, renders a scale slider in the toolbar. */
+  scaleControls?: PixelEditorScaleControls;
+  /**
+   * Called when the user clicks "Save". `meta.modified` is true if the
+   * user's paint actions touched the buffer (by checking the internal undo
+   * stack). Lets callers distinguish "user adjusted scale only" from "user
+   * actually drew" so the logo editor can choose between persisting the
+   * scale field vs. baking a new PNG source.
+   */
+  onSave: (pixels: Uint8ClampedArray, meta: { modified: boolean }) => void;
   onCancel: () => void;
 }
 
@@ -85,11 +119,18 @@ export function PixelEditor({
   mode,
   title,
   tileBoundary,
+  toolsEnabled = true,
+  scaleControls,
   onSave,
   onCancel,
 }: Props) {
   const [pixels, setPixels] = useState<Uint8ClampedArray>(() => clonePixels(initialPixels));
   const [tool, setTool] = useState<Tool>("pencil");
+  // Brush size applies to pencil + eraser. 1 = classic single-pixel behavior;
+  // larger values stamp an N×N block, useful for cleaning drop shadows or
+  // bulk-erasing regions without relying on flood fill. Capped at 16 — plenty
+  // for a 24×36 glyph and still sane on a 576×144 banner.
+  const [brushSize, setBrushSize] = useState<number>(1);
   const [color, setColor] = useState<Rgb>(mode === "analog" ? [255, 255, 255] : [0, 255, 170]);
   const [showGrid, setShowGrid] = useState<boolean>(true);
   const [recent, setRecent] = useState<Rgb[]>([]);
@@ -97,11 +138,35 @@ export function PixelEditor({
   const [redoStack, setRedoStack] = useState<Uint8ClampedArray[]>([]);
   const [zoom, setZoom] = useState<number>(() => defaultZoomFor(width, height));
 
+  // Reseed when the caller passes a fresh initialPixels buffer (e.g. the logo
+  // editor's scale slider re-rasterizes the source and hands us new RGBA).
+  // Undo/redo stacks clear because they belong to the previous rasterization
+  // — keeping them would let redo paint over pixels that no longer represent
+  // the user's intent. Gated on identity so a re-render with the same ref
+  // doesn't wipe active drawings.
+  useEffect(() => {
+    setPixels(clonePixels(initialPixels));
+    setUndoStack([]);
+    setRedoStack([]);
+  }, [initialPixels]);
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sourceBufferRef = useRef<OffscreenCanvas | null>(null);
   const drawingRef = useRef<boolean>(false);
   const lastCellRef = useRef<{ x: number; y: number } | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
+  // Straight-line drag state: when the user holds Shift at pointerdown, the
+  // whole drag locks to horizontal/vertical from the starting cell. We
+  // snapshot the pre-drag pixels once so each pointermove can reset + redraw
+  // from the base — otherwise the intermediate stamps would leave zigzag
+  // trails as the user swings around the locked axis.
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+  const strokeBaseRef = useRef<Uint8ClampedArray | null>(null);
+  const shiftLockRef = useRef<boolean>(false);
+  // Hover cell for the brush outline overlay. Updated on every pointermove,
+  // cleared on pointerleave. Gated to "changed" so we don't trigger a
+  // re-render per sub-pixel mouse motion.
+  const [hoverCell, setHoverCell] = useState<{ x: number; y: number } | null>(null);
 
   const displayW = width * zoom;
   const displayH = height * zoom;
@@ -164,7 +229,42 @@ export function PixelEditor({
         ctx.stroke();
       }
     }
-  }, [pixels, showGrid, zoom, width, height, displayW, displayH, gridW, gridH]);
+
+    // Brush outline. Only meaningful when a pencil/eraser-like tool is active
+    // AND the user's cursor is over the canvas. Drawn in two strokes (dark +
+    // light, offset by 0.5 px) so the outline stays visible across dark, mid,
+    // and light source pixels without sprouting separate "invert" math.
+    const showBrush =
+      toolsEnabled && hoverCell && (tool === "pencil" || tool === "eraser");
+    if (showBrush) {
+      const startOffset = -Math.floor((brushSize - 1) / 2);
+      const bx = (hoverCell.x + startOffset) * zoom;
+      const by = (hoverCell.y + startOffset) * zoom;
+      const bw = brushSize * zoom;
+      const bh = brushSize * zoom;
+      ctx.lineWidth = 1;
+      // Dark backing stroke — slightly larger rect shifted up-left.
+      ctx.strokeStyle = "rgba(0, 0, 0, 0.85)";
+      ctx.strokeRect(bx - 0.5, by - 0.5, bw + 1, bh + 1);
+      // Light foreground stroke — crisp on dark backings.
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
+      ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+    }
+  }, [
+    pixels,
+    showGrid,
+    zoom,
+    width,
+    height,
+    displayW,
+    displayH,
+    gridW,
+    gridH,
+    hoverCell,
+    brushSize,
+    tool,
+    toolsEnabled,
+  ]);
 
   // Escape to cancel. Attached to document so focus doesn't have to be inside
   // the modal for it to work — matches the "backdrop-click closes" intuition.
@@ -255,11 +355,11 @@ export function PixelEditor({
   const applyTool = (x: number, y: number, draftPixels: Uint8ClampedArray): void => {
     switch (tool) {
       case "pencil":
-        setPixel(draftPixels, width, height, x, y, color);
+        stampBrush(draftPixels, width, height, x, y, color, brushSize);
         addRecentColor(color);
         break;
       case "eraser":
-        erasePixel(draftPixels, width, height, x, y);
+        stampBrush(draftPixels, width, height, x, y, CHROMA_GRAY, brushSize);
         break;
       case "fill":
         floodFill(draftPixels, width, height, x, y, color);
@@ -272,6 +372,11 @@ export function PixelEditor({
   };
 
   const onPointerDown = (e: PointerEvent) => {
+    // Scale-only mode (e.g. BTFL banner in scale-preview): canvas is a
+    // preview, not a draw surface. Swallow pointer events so clicking through
+    // doesn't start a ghost draw that can't be undone via the hidden undo
+    // button.
+    if (!toolsEnabled) return;
     const cell = pointerToCell(e);
     if (!cell) return;
     snapshot();
@@ -280,21 +385,60 @@ export function PixelEditor({
     setPixels(next);
     drawingRef.current = true;
     lastCellRef.current = cell;
+    dragStartRef.current = cell;
+    // Lock the drag to an axis for its full duration if Shift was held at
+    // click time — predictable and matches the usual "hold Shift then click"
+    // muscle memory. The snapshot lets the pointermove handler restore +
+    // redraw from scratch each tick, so swinging around the cursor during a
+    // locked drag doesn't leave a zigzag stamp trail.
+    shiftLockRef.current = e.shiftKey && (tool === "pencil" || tool === "eraser");
+    strokeBaseRef.current = shiftLockRef.current ? clonePixels(pixels) : null;
     (e.currentTarget as HTMLCanvasElement).setPointerCapture(e.pointerId);
   };
 
   const onPointerMove = (e: PointerEvent) => {
+    if (!toolsEnabled) return;
+    // Always track hover for the brush outline, even when not drawing. Guard
+    // the state write on cell-changed so moving the mouse within a single
+    // pixel cell doesn't churn re-renders.
+    const cell = pointerToCell(e);
+    if (cell) {
+      if (!hoverCell || hoverCell.x !== cell.x || hoverCell.y !== cell.y) {
+        setHoverCell(cell);
+      }
+    }
     if (!drawingRef.current) return;
     if (tool === "fill" || tool === "eyedropper") return;
-    const cell = pointerToCell(e);
     if (!cell) return;
+
+    if (shiftLockRef.current && dragStartRef.current && strokeBaseRef.current) {
+      // Straight-line drag mode: pick the axis with the larger delta (H-lock
+      // when moving mostly sideways, V-lock when moving mostly up/down), then
+      // redraw the whole stroke from the pointerdown anchor. Starting from
+      // the base snapshot each move means the preview shows a clean single
+      // line, not an accumulation of intermediate strokes.
+      const start = dragStartRef.current;
+      const dx = Math.abs(cell.x - start.x);
+      const dy = Math.abs(cell.y - start.y);
+      const target = dx >= dy ? { x: cell.x, y: start.y } : { x: start.x, y: cell.y };
+      const last = lastCellRef.current;
+      if (last && last.x === target.x && last.y === target.y) return;
+      const next = clonePixels(strokeBaseRef.current);
+      const rgb = tool === "eraser" ? CHROMA_GRAY : color;
+      drawLine(next, width, height, start.x, start.y, target.x, target.y, rgb, brushSize);
+      setPixels(next);
+      lastCellRef.current = target;
+      return;
+    }
+
+    // Free-draw mode: accumulate stamps, line-connecting to the previous
+    // cell so fast sweeps don't leave gaps.
     const last = lastCellRef.current;
     if (last && last.x === cell.x && last.y === cell.y) return;
-    const next = clonePixels(pixels);
-    // Line-connect to the previous cell so fast sweeps don't leave gaps.
     const src = last ?? cell;
+    const next = clonePixels(pixels);
     const rgb = tool === "eraser" ? CHROMA_GRAY : color;
-    drawLine(next, width, height, src.x, src.y, cell.x, cell.y, rgb);
+    drawLine(next, width, height, src.x, src.y, cell.x, cell.y, rgb, brushSize);
     setPixels(next);
     lastCellRef.current = cell;
   };
@@ -302,6 +446,16 @@ export function PixelEditor({
   const onPointerUp = () => {
     drawingRef.current = false;
     lastCellRef.current = null;
+    dragStartRef.current = null;
+    strokeBaseRef.current = null;
+    shiftLockRef.current = false;
+  };
+
+  const onPointerLeave = () => {
+    // Clear the brush outline when the cursor leaves the canvas so the ring
+    // doesn't linger at the last-hovered cell while the user reaches for
+    // sliders / buttons in the toolbar.
+    setHoverCell(null);
   };
 
   const undo = () => {
@@ -356,7 +510,7 @@ export function PixelEditor({
       >
         <header class="flex items-center justify-between border-b border-slate-800 px-4 py-2">
           <h2 class="font-mono text-sm font-semibold text-osd-mint">
-            ✎ Draw · <span class="text-slate-300">{title}</span>
+            ✎ Edit · <span class="text-slate-300">{title}</span>
             <span class="text-slate-500 text-[11px] ml-2 font-normal">
               {width}×{height}
             </span>
@@ -374,38 +528,69 @@ export function PixelEditor({
         <div class="flex gap-4 p-4 flex-1 min-h-0">
           {/* Toolbar */}
           <div class="flex flex-col gap-3 w-44 shrink-0 font-mono text-[11px]">
-            <ToolPicker tool={tool} onPick={setTool} />
-            <Palette mode={mode} color={color} onPickColor={(c) => {
-              setColor(c);
-              addRecentColor(c);
-            }} recent={recent} />
+            {toolsEnabled && <ToolPicker tool={tool} onPick={setTool} />}
+            {toolsEnabled && (tool === "pencil" || tool === "eraser") && (
+              <label class="flex flex-col gap-0.5 text-slate-400 text-[10px]">
+                <span>
+                  Brush <span class="text-slate-300">{brushSize}px</span>
+                </span>
+                <input
+                  type="range"
+                  min={1}
+                  max={16}
+                  step={1}
+                  value={brushSize}
+                  onInput={(e: Event) =>
+                    setBrushSize(parseInt((e.target as HTMLInputElement).value, 10))
+                  }
+                  aria-label="Brush size"
+                  class="accent-osd-mint"
+                />
+              </label>
+            )}
+            {toolsEnabled && (
+              <Palette
+                mode={mode}
+                color={color}
+                onPickColor={(c) => {
+                  setColor(c);
+                  addRecentColor(c);
+                }}
+                recent={recent}
+              />
+            )}
+            {scaleControls && <ScaleSlider controls={scaleControls} />}
             <div class="flex flex-col gap-1">
-              <div class="flex gap-1">
-                <Button
-                  variant="secondary"
-                  onClick={undo}
-                  disabled={undoStack.length === 0}
-                  class="flex-1 !px-2 !py-1 !text-[10px]"
-                >
-                  ↶ Undo
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={redo}
-                  disabled={redoStack.length === 0}
-                  class="flex-1 !px-2 !py-1 !text-[10px]"
-                >
-                  ↷ Redo
-                </Button>
-              </div>
-              <Button
-                variant="secondary"
-                onClick={clearAll}
-                class="!px-2 !py-1 !text-[10px]"
-                title="Clear tile to chroma-gray (transparent)"
-              >
-                Clear all
-              </Button>
+              {toolsEnabled && (
+                <>
+                  <div class="flex gap-1">
+                    <Button
+                      variant="secondary"
+                      onClick={undo}
+                      disabled={undoStack.length === 0}
+                      class="flex-1 !px-2 !py-1 !text-[10px]"
+                    >
+                      ↶ Undo
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      onClick={redo}
+                      disabled={redoStack.length === 0}
+                      class="flex-1 !px-2 !py-1 !text-[10px]"
+                    >
+                      ↷ Redo
+                    </Button>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    onClick={clearAll}
+                    class="!px-2 !py-1 !text-[10px]"
+                    title="Clear tile to chroma-gray (transparent)"
+                  >
+                    Clear all
+                  </Button>
+                </>
+              )}
               <label class="flex items-center gap-2 mt-1 cursor-pointer text-slate-400">
                 <input
                   type="checkbox"
@@ -432,22 +617,54 @@ export function PixelEditor({
             <RealSizePreview pixels={pixels} width={width} height={height} />
           </div>
 
-          {/* Canvas */}
-          <div class="flex-1 flex items-center justify-center overflow-auto bg-slate-950 border border-slate-800 rounded p-3">
-            <canvas
-              ref={canvasRef}
-              onPointerDown={onPointerDown}
-              onPointerMove={onPointerMove}
-              onPointerUp={onPointerUp}
-              onPointerCancel={onPointerUp}
+          {/*
+           * Canvas container. Centering + overflow is tricky: `flex
+           * justify-center` on the scroll container pushes the overflowing
+           * content's left edge into negative scroll space (unreachable);
+           * `margin: auto` on a block-level child only centers horizontally.
+           *
+           * Fix: a flex-centered INNER wrapper sized to
+           * `max(100%, fit-content)` on both axes. When the canvas fits, the
+           * wrapper matches the scroll container and flex-center actually
+           * centers. When the canvas exceeds it, the wrapper grows to the
+           * canvas size so flex-center still centers *within the wrapper* —
+           * and the outer overflow-auto scrolls from 0,0 because the wrapper
+           * starts at the origin. Works on both axes.
+           */}
+          <div class="flex-1 overflow-auto bg-slate-950 border border-slate-800 rounded p-3">
+            <div
               style={{
-                width: `${displayW}px`,
-                height: `${displayH}px`,
-                imageRendering: "pixelated",
-                cursor: tool === "eyedropper" ? "crosshair" : "cell",
-                touchAction: "none",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                minWidth: "100%",
+                minHeight: "100%",
+                width: "fit-content",
+                height: "fit-content",
               }}
-            />
+            >
+              <canvas
+                ref={canvasRef}
+                onPointerDown={onPointerDown}
+                onPointerMove={onPointerMove}
+                onPointerUp={onPointerUp}
+                onPointerCancel={onPointerUp}
+                onPointerLeave={onPointerLeave}
+                style={{
+                  width: `${displayW}px`,
+                  height: `${displayH}px`,
+                  imageRendering: "pixelated",
+                  cursor: !toolsEnabled
+                    ? "default"
+                    : tool === "eyedropper"
+                      ? "crosshair"
+                      : "cell",
+                  touchAction: "none",
+                  display: "block",
+                  flexShrink: 0,
+                }}
+              />
+            </div>
           </div>
         </div>
 
@@ -455,7 +672,10 @@ export function PixelEditor({
           <Button variant="secondary" onClick={onCancel}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={() => onSave(pixels)}>
+          <Button
+            variant="primary"
+            onClick={() => onSave(pixels, { modified: undoStack.length > 0 })}
+          >
             Save tile
           </Button>
         </footer>
@@ -466,8 +686,8 @@ export function PixelEditor({
 
 function ToolPicker({ tool, onPick }: { tool: Tool; onPick: (t: Tool) => void }) {
   const tools: Array<{ id: Tool; label: string; hint: string }> = [
-    { id: "pencil", label: "✎ Pencil", hint: "Click/drag to paint with the current color." },
-    { id: "eraser", label: "⌫ Eraser", hint: "Click/drag to write chroma-gray (transparent)." },
+    { id: "pencil", label: "✎ Pencil", hint: "Click/drag to paint. Hold Shift while dragging to lock to a straight line." },
+    { id: "eraser", label: "⌫ Eraser", hint: "Click/drag to write chroma-gray (transparent). Hold Shift for a straight line." },
     { id: "fill", label: "🪣 Fill", hint: "Flood-fill the clicked region with the current color." },
     { id: "eyedropper", label: "💧 Eyedropper", hint: "Click a pixel to adopt its color." },
   ];
@@ -491,6 +711,47 @@ function ToolPicker({ tool, onPick }: { tool: Tool; onPick: (t: Tool) => void })
           {t.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Scale slider rendered inside the toolbar when the parent supplied
+ * scaleControls. Mirrors the shape of the LogoScaleEditor / OverrideScale
+ * sliders so behavior feels identical — live preview on input, commit on
+ * release, reset back to 1.0 via the inline button.
+ */
+function ScaleSlider({ controls }: { controls: PixelEditorScaleControls }) {
+  return (
+    <div class="flex flex-col gap-1">
+      <div class="flex items-center justify-between">
+        <span class="text-slate-500 uppercase tracking-wider text-[9px]">Scale</span>
+        {controls.value !== 1 && controls.onReset && (
+          <button
+            onClick={controls.onReset}
+            class="text-slate-500 hover:text-osd-mint text-[9px] px-1"
+            title="Reset to fit (1.0×)"
+          >
+            reset
+          </button>
+        )}
+      </div>
+      <input
+        type="range"
+        min={controls.min}
+        max={controls.max}
+        step={controls.step}
+        value={controls.value}
+        onInput={(e: Event) => controls.onInput(parseFloat((e.target as HTMLInputElement).value))}
+        onChange={controls.onCommit}
+        onPointerUp={controls.onCommit}
+        onBlur={controls.onCommit}
+        aria-label="Image scale"
+        class="accent-osd-mint"
+      />
+      <span class="text-slate-300 text-[10px] tabular-nums">
+        {controls.value.toFixed(2)}×
+      </span>
     </div>
   );
 }

@@ -52,6 +52,34 @@ export function erasePixel(
 }
 
 /**
+ * Paint an N×N square of `rgb` centered on (cx, cy). For even N the square
+ * biases up-and-left by half a pixel — standard pixel-editor convention and
+ * the only way to center an even-count block on a single cursor cell.
+ *
+ * size ≤ 1 collapses to a single setPixel.
+ */
+export function stampBrush(
+  pixels: Uint8ClampedArray,
+  width: number,
+  height: number,
+  cx: number,
+  cy: number,
+  rgb: Rgb,
+  size: number,
+): void {
+  if (size <= 1) {
+    setPixel(pixels, width, height, cx, cy, rgb);
+    return;
+  }
+  const startOffset = -Math.floor((size - 1) / 2);
+  for (let dy = 0; dy < size; dy++) {
+    for (let dx = 0; dx < size; dx++) {
+      setPixel(pixels, width, height, cx + startOffset + dx, cy + startOffset + dy, rgb);
+    }
+  }
+}
+
+/**
  * BFS flood fill from (x, y): every pixel connected 4-way that matches the
  * start pixel's RGB gets replaced with `newColor`. No-op when the clicked
  * pixel already matches newColor (saves a redundant fill + undo entry).
@@ -85,9 +113,11 @@ export function colorsEqual(a: Rgb, b: Rgb): boolean {
 }
 
 /**
- * Draw a 1-pixel-wide line of `rgb` from (x0,y0) to (x1,y1). Bresenham;
- * covers the "click-drag" painting path so fast mouse sweeps don't leave
- * gaps between sampled points.
+ * Draw a line of `rgb` from (x0,y0) to (x1,y1). Bresenham; covers the
+ * "click-drag" painting path so fast mouse sweeps don't leave gaps between
+ * sampled points. `size` controls brush width — 1 (default) keeps the
+ * classic 1-pixel behavior; larger values stamp an N×N square at every
+ * Bresenham step.
  */
 export function drawLine(
   pixels: Uint8ClampedArray,
@@ -98,6 +128,7 @@ export function drawLine(
   x1: number,
   y1: number,
   rgb: Rgb,
+  size = 1,
 ): void {
   let cx = x0;
   let cy = y0;
@@ -107,7 +138,7 @@ export function drawLine(
   const sy = y0 < y1 ? 1 : -1;
   let err = dx + dy;
   while (true) {
-    setPixel(pixels, width, height, cx, cy, rgb);
+    stampBrush(pixels, width, height, cx, cy, rgb, size);
     if (cx === x1 && cy === y1) break;
     const e2 = 2 * err;
     if (e2 >= dy) {

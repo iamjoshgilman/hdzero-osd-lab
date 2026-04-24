@@ -5,6 +5,7 @@ import {
   erasePixel,
   floodFill,
   drawLine,
+  stampBrush,
   clonePixels,
   colorsEqual,
   parseHexRgb,
@@ -146,6 +147,52 @@ describe("pixel-ops: drawLine", () => {
     drawLine(px, 3, 3, 1, 1, 1, 1, [255, 0, 0]);
     expect(getPixel(px, 3, 3, 1, 1)).toEqual([255, 0, 0]);
     expect(getPixel(px, 3, 3, 0, 0)).toEqual([0, 0, 0]);
+  });
+
+  it("size > 1 paints a brush-wide trail (no gaps on a diagonal)", () => {
+    const px = solid(8, 8, [0, 0, 0]);
+    drawLine(px, 8, 8, 1, 1, 6, 6, [255, 0, 0], 3);
+    // Diagonal-adjacent pixels that a size-1 line would miss should be red
+    // once the 3×3 brush stamps at each Bresenham step.
+    expect(getPixel(px, 8, 8, 2, 1)).toEqual([255, 0, 0]);
+    expect(getPixel(px, 8, 8, 1, 2)).toEqual([255, 0, 0]);
+    // Far corners stay untouched — brush isn't big enough to reach them.
+    expect(getPixel(px, 8, 8, 0, 7)).toEqual([0, 0, 0]);
+    expect(getPixel(px, 8, 8, 7, 0)).toEqual([0, 0, 0]);
+  });
+});
+
+describe("pixel-ops: stampBrush", () => {
+  it("size=1 behaves exactly like setPixel", () => {
+    const px = solid(3, 3, [0, 0, 0]);
+    stampBrush(px, 3, 3, 1, 1, [9, 9, 9], 1);
+    expect(getPixel(px, 3, 3, 1, 1)).toEqual([9, 9, 9]);
+    // Neighbors stay untouched.
+    expect(getPixel(px, 3, 3, 0, 1)).toEqual([0, 0, 0]);
+    expect(getPixel(px, 3, 3, 2, 2)).toEqual([0, 0, 0]);
+  });
+
+  it("odd size centers on the cursor (3×3 at (2,2) fills (1..3, 1..3))", () => {
+    const px = solid(5, 5, [0, 0, 0]);
+    stampBrush(px, 5, 5, 2, 2, [1, 2, 3], 3);
+    for (let y = 1; y <= 3; y++) {
+      for (let x = 1; x <= 3; x++) {
+        expect(getPixel(px, 5, 5, x, y)).toEqual([1, 2, 3]);
+      }
+    }
+    // Outside the 3×3 block stays black.
+    expect(getPixel(px, 5, 5, 0, 0)).toEqual([0, 0, 0]);
+    expect(getPixel(px, 5, 5, 4, 4)).toEqual([0, 0, 0]);
+  });
+
+  it("clips at the buffer edges instead of throwing", () => {
+    const px = solid(4, 4, [0, 0, 0]);
+    // 5×5 brush at (0,0) would paint at negative offsets; setPixel no-ops OOB.
+    stampBrush(px, 4, 4, 0, 0, [255, 0, 0], 5);
+    // Top-left corner filled.
+    expect(getPixel(px, 4, 4, 0, 0)).toEqual([255, 0, 0]);
+    // Far corner untouched (brush can't reach).
+    expect(getPixel(px, 4, 4, 3, 3)).toEqual([0, 0, 0]);
   });
 });
 

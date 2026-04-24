@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.8] - 2026-04-24 — Editor overhaul: scroll fix, unified logo edit, brush size, shift-lock
+
+A batched polish pass driven by live dev-server hunting — six findings across the pixel editor and Decoration page consolidated into one release instead of shipping each as its own patch.
+
+### Fixed — pixel editor canvas navigation
+
+- **Zoomed canvas couldn't scroll to its left edge.** The container used `flex items-center justify-center overflow-auto`, so when the canvas exceeded the container `justify-center` pushed the left edge into negative scroll-left territory — unreachable even at scroll=0. Reworked to a flex-centered inner wrapper sized `min(100%, fit-content)` on both axes: centers when the canvas fits, outer `overflow-auto` scrolls cleanly from origin when it doesn't. Fixes both axes.
+- **No vertical scroll or centering.** Same root cause; the `margin: auto` attempt at v1 only horizontally centered in a block container. The wrapper pattern handles both.
+
+### Changed — unified logo editor (Decoration page)
+
+- **Scale slider moved into the editor for both logo slots.** Inline `LogoScaleEditor` on each Decoration card is gone; the scale knob lives inside the `✎ Edit` modal alongside paint tools. Decoration page is now about *picking + previewing* the logo, the editor is about *editing* it — cleaner mental model, less visual clutter on the card.
+- **`✎ Draw` renamed to `✎ Edit`** — it does both now (scale + paint), the old label was misleading.
+- **BTFL banner is now drawable.** Previously gated off because 576×144 was awkward to edit pixel-by-pixel in-browser; with the scale slider + zoom controls + scroll-fix all in place, banner editing is viable. "Draw from scratch" from an empty slot lights up for BTFL too.
+- **Edit-session lifecycle in the modal.** Opening the editor lazily snapshots on the first scale-slider move. Save commits one undo entry (or, if the user drew, rolls the session back first and then `mutate()`s the drawn PNG — so the undo step lands on the pre-edit state). Cancel / close rolls back. Same pattern the TTF form already uses.
+
+### Added — `PixelEditor` gains scale-knob + tools-disabled modes
+
+- **`scaleControls?: PixelEditorScaleControls` prop.** When provided, the editor renders a scale slider in the toolbar with value/min/max/step + onInput / onCommit / onReset callbacks. Parents integrate with `mutateLive` for live preview. Used by both BTFL and mini-logo in the Decoration flow.
+- **`toolsEnabled?: boolean` prop** (default `true`). `false` hides the paint toolbar, palette, recent colors, undo/redo/clear, and disables pointer drawing — the editor becomes a scale-and-preview surface. BTFL banner historically opened in this mode before we made it drawable in this release.
+- **`onSave` now passes `{ modified: boolean }`** (derived from undo-stack length). Lets the logo editor distinguish "user adjusted scale only" (commit session) from "user drew" (rollback + new PNG source).
+- **Reseed on `initialPixels` identity change.** When the scale slider re-rasterizes the source and hands new RGBA to the editor, the pixel buffer + undo/redo stacks clear so the user isn't painting on top of stale pixels from the old scale.
+
+### Added — brush size for pencil / eraser
+
+- **1–16 px square brush**, exposed as a slider in the toolbar shown only when pencil/eraser is the active tool. Fill and eyedropper don't use it. Size=1 keeps the classic single-pixel behavior.
+- **`stampBrush(pixels, w, h, cx, cy, rgb, size)`** helper in `pixel-ops`: paints an N×N square centered on the cursor (standard pixel-editor top-left bias for even sizes). Clips at buffer edges instead of throwing.
+- **`drawLine` takes optional `size` param** (default 1, back-compat with every existing caller + test). At size > 1, stamps the brush at each Bresenham step so drags leave continuous thick trails — not isolated N×N stamps.
+- **Use case:** bulk-erasing drop shadows or other imported-image artifacts that were painful to clean one pixel at a time.
+
+### Added — brush outline + shift-drag straight lines
+
+- **Hover ring** shows the N×N brush footprint under the cursor wherever it moves on the canvas. Drawn as two 1-px strokes (dark shadow + light foreground, offset 0.5 px) so it stays visible across any background tone without inversion math. Pencil/eraser only. Clears on pointer-leave so it doesn't ghost-linger when the user reaches for the toolbar.
+- **Shift-drag axis-lock.** Holding Shift at pointerdown locks the whole drag to horizontal or vertical — axis is chosen per-move based on the larger cursor delta from the start. Implementation snapshots the pre-drag buffer at pointerdown and redraws the locked line from the base on each move, so swinging around the axis doesn't leave a zigzag trail of intermediate stamps. Tool tooltips mention the shortcut.
+
+### Tests
+
+- 229 tests, all green (was 225). Added for `stampBrush` (size=1 = setPixel, odd-size centering, even-size top-left bias, edge clipping) and for `drawLine` with `size > 1` (brush-wide diagonal trail has no gaps).
+
+### Bumped
+
+- `package.json` version `0.3.7` → `0.3.8`.
+
 ## [0.3.7] - 2026-04-23 — Live preview on Decoration logo cards
 
 ### Added — live logo preview

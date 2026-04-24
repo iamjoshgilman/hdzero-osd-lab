@@ -5,7 +5,7 @@
 // banner; analog doesn't, so pilots trigger via Craft Name / Warnings).
 
 import { useComputed } from "@preact/signals";
-import { useRef, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import {
   project,
   mutate,
@@ -208,6 +208,106 @@ export function DecorationPage() {
           <LogoSlotCard key={spec.slot} spec={spec} mode={mode} />
         ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Live preview of a resolved logo layer. Reads the post-aspect-fit + scaled
+ * RGBA buffer from the resolver and paints it to a canvas at native tile
+ * resolution, then CSS-upscales with `imageRendering: pixelated` so the
+ * user can actually see the pixels at a readable size.
+ *
+ * Chroma-gray (127,127,127) areas render as transparent on the goggle, so
+ * we translate them to alpha=0 in the preview and show a dark slate bg
+ * through — matches the "transparent on goggle" mental model and makes the
+ * logo silhouette pop against what would otherwise be a chunk of literal
+ * gray inside the card.
+ *
+ * Target preview width is capped at ~480px; aspect is preserved.
+ */
+function LogoPreview({
+  layerId,
+  dims,
+}: {
+  layerId: string;
+  dims: { w: number; h: number };
+}) {
+  const { assets } = useResolvedAssets();
+  const rgba = useComputed(() => assets.value.logo.get(layerId) ?? null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    canvas.width = dims.w;
+    canvas.height = dims.h;
+    const src = rgba.value;
+    if (!src || src.width !== dims.w || src.height !== dims.h) {
+      // Not resolved yet (or still in flight on a mode switch). Paint
+      // transparent so the dark card bg shows and the preview appears
+      // "loading" rather than showing stale pixels.
+      ctx.clearRect(0, 0, dims.w, dims.h);
+      return;
+    }
+    // Copy the RGBA, rewriting chroma-gray pixels to fully transparent so
+    // the preview mimics the on-goggle transparent-key behavior.
+    const copy = new Uint8ClampedArray(src.data.length);
+    for (let i = 0; i < src.data.length; i += 4) {
+      const r = src.data[i]!;
+      const g = src.data[i + 1]!;
+      const b = src.data[i + 2]!;
+      if (r === 127 && g === 127 && b === 127) {
+        copy[i] = 0;
+        copy[i + 1] = 0;
+        copy[i + 2] = 0;
+        copy[i + 3] = 0;
+      } else {
+        copy[i] = r;
+        copy[i + 1] = g;
+        copy[i + 2] = b;
+        copy[i + 3] = src.data[i + 3]!;
+      }
+    }
+    ctx.putImageData(new ImageData(copy, dims.w, dims.h), 0, 0);
+  }, [rgba.value, dims.w, dims.h]);
+
+  // Fit to a ~480px preview width max; if the logo is tiny (mini analog
+  // 60×18) we still zoom up to something readable.
+  const MAX_PREVIEW_W = 480;
+  const MIN_ZOOM = 2;
+  const zoomFromWidth = MAX_PREVIEW_W / dims.w;
+  const zoom = Math.max(MIN_ZOOM, Math.min(zoomFromWidth, 8));
+  const viewW = Math.round(dims.w * zoom);
+  const viewH = Math.round(dims.h * zoom);
+
+  return (
+    <div class="flex flex-col gap-1">
+      <span class="text-[10px] font-mono text-slate-500 uppercase tracking-wider">
+        Preview
+      </span>
+      <div
+        class="border border-slate-800 bg-slate-950 rounded p-2 overflow-auto"
+        // overflow-auto so a BTFL banner at the widest CSS zoom still fits
+        // into narrow viewports (the card has a max width in its section).
+      >
+        <canvas
+          ref={canvasRef}
+          style={{
+            width: `${viewW}px`,
+            height: `${viewH}px`,
+            imageRendering: "pixelated",
+            display: "block",
+          }}
+          aria-label="Logo preview"
+        />
+      </div>
+      <p class="text-[10px] text-slate-500 leading-snug">
+        Chroma-gray pixels show as transparent (dark bg) — that's what
+        renders as "see-through" on the goggle.
+      </p>
     </div>
   );
 }
@@ -426,6 +526,7 @@ function LogoSlotCard({ spec, mode }: { spec: LogoSlotSpec; mode: OsdMode }) {
               </Button>
             </div>
           </div>
+          <LogoPreview layerId={layer.value.id} dims={dims} />
           <LogoScaleEditor layer={layer.value} />
         </div>
       ) : spec.drawable ? (

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.7] - 2026-04-23 — Live preview on Decoration logo cards
+
+### Added — live logo preview
+
+- **Each active logo on the Decoration page now renders a live preview** between the file-info row and the scale slider. Reads the resolver's post-aspect-fit + post-scale RGBA buffer and paints it to a canvas at native tile resolution, CSS-upscaled with `imageRendering: pixelated`. Updates in real time as the scale slider drags — the whole reason v0.3.6 shipped was to dial in logo framing, and doing that blind was awkward.
+- **Chroma-gray pixels render as transparent** in the preview (against a dark slate panel bg) so the logo silhouette pops the way it will on-goggle, not buried in literal gray.
+- **Smart zoom**: target preview width is ~480px; minimum 2× so a mini-logo (60×18 analog, 120×36 HD) stays readable; max 8× to keep things reasonable. Aspect preserved. BTFL banner at ~4:1 renders wide; mini-logo renders stumpier — matches on-goggle proportion.
+- `overflow-auto` wrapper so a BTFL preview at full CSS zoom still fits into narrow viewports.
+
+### Tests
+
+- 225 tests, all green. No new tests — the preview is a thin `useEffect` over signal-driven RGBA that's already exercised end-to-end by the logo resolver tests.
+
+### Bumped
+
+- `package.json` version `0.3.6` → `0.3.7`.
+
 ## [0.3.6] - 2026-04-23 — Scalable logo layers (BTFL banner + mini-logo)
 
 ### Added — scale knob for logo layers

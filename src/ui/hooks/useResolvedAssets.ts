@@ -327,7 +327,9 @@ async function loadLogoLayers(
     }
     try {
       const target = logoSize[layer.slot];
-      const sized = await scaleImageToLogoSlot(rec.bytes, rec.mime, target);
+      const userScale =
+        layer.scale !== undefined && layer.scale > 0 ? layer.scale : 1.0;
+      const sized = await scaleImageToLogoSlot(rec.bytes, rec.mime, target, userScale);
       out.logo.set(layer.id, sized);
     } catch (err) {
       errs[layer.id] = err instanceof Error ? err.message : String(err);
@@ -341,11 +343,19 @@ async function loadLogoLayers(
  * non-matching inputs get letterboxed onto chroma-gray (transparent on the
  * goggle). Transparent-PNG inputs likewise resolve to chroma-gray in the
  * untouched regions so compositing on-goggle looks right.
+ *
+ * `userScale` multiplies the computed aspect-fit dimensions:
+ *   - 1.0 (default) — classic aspect-fit + chroma-gray letterbox.
+ *   - > 1 — image grows past the slot; canvas clips at slot edges so the
+ *     center of the image stays framed and any baked-in padding gets
+ *     cropped away (the whole point of the knob).
+ *   - < 1 — extra chroma-gray padding around a shrunk image.
  */
 async function scaleImageToLogoSlot(
   bytes: ArrayBuffer,
   mime: string,
   target: { w: number; h: number },
+  userScale = 1.0,
 ): Promise<RgbaImage> {
   const blob = new Blob([bytes], { type: mime || "image/png" });
   const src = await createImageBitmap(blob);
@@ -363,19 +373,22 @@ async function scaleImageToLogoSlot(
   const tgtAR = target.w / target.h;
   let dw: number;
   let dh: number;
-  let dx: number;
-  let dy: number;
   if (srcAR > tgtAR) {
     dw = target.w;
     dh = target.w / srcAR;
-    dx = 0;
-    dy = (target.h - dh) / 2;
   } else {
     dh = target.h;
     dw = target.h * srcAR;
-    dx = (target.w - dw) / 2;
-    dy = 0;
   }
+  // Apply user scale after the aspect-fit pass. At scale > 1 dw/dh exceed the
+  // slot, so dx/dy go negative to keep the image centered; the OffscreenCanvas
+  // drawImage clips at canvas bounds, giving us a cover-style crop at the
+  // chosen scale. At scale < 1, extra chroma-gray padding shows around the
+  // shrunk image.
+  dw *= userScale;
+  dh *= userScale;
+  const dx = (target.w - dw) / 2;
+  const dy = (target.h - dh) / 2;
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
   ctx.drawImage(src, dx, dy, dw, dh);

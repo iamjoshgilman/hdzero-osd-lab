@@ -5,8 +5,14 @@
 // banner; analog doesn't, so pilots trigger via Craft Name / Warnings).
 
 import { useComputed } from "@preact/signals";
-import { useState } from "preact/hooks";
-import { project, mutate } from "@/state/store";
+import { useRef, useState } from "preact/hooks";
+import {
+  project,
+  mutate,
+  mutateLive,
+  beginEditSession,
+  commitEditSession,
+} from "@/state/store";
 import { putAsset } from "@/state/assets";
 import { FileDrop } from "@/ui/shared/FileDrop";
 import { Button } from "@/ui/shared/Button";
@@ -14,7 +20,7 @@ import { PixelEditor } from "@/ui/pixel-editor/PixelEditor";
 import { rgbToPngBlob } from "@/ui/pixel-editor/pixel-ops";
 import { useResolvedAssets } from "@/ui/hooks/useResolvedAssets";
 import { ANALOG_GLYPH_SIZE, GLYPH_SIZE } from "@/compositor/constants";
-import type { LogoLayer, OsdMode } from "@/state/project";
+import type { LogoLayer, OsdMode, ProjectDoc } from "@/state/project";
 
 interface LogoSlotSpec {
   slot: LogoLayer["slot"];
@@ -206,6 +212,102 @@ export function DecorationPage() {
   );
 }
 
+/** Slider bounds for logo scale. Wider range than glyph overrides because
+ * logos more commonly ship with large baked-in margins (PNG templates from
+ * design tools often pad 20–40% on each side).
+ */
+const LOGO_SCALE_MIN = 0.5;
+const LOGO_SCALE_MAX = 3.0;
+const LOGO_SCALE_STEP = 0.05;
+
+/**
+ * Scale slider + readout + reset for a logo layer. Uses the same
+ * edit-session pattern as the override scale slider (snapshot on first
+ * drag tick, mutateLive per input, commit on pointer release), so a drag
+ * is one undo entry instead of 50.
+ */
+function LogoScaleEditor({ layer }: { layer: LogoLayer }) {
+  const sessionSnapshotRef = useRef<ProjectDoc | null>(null);
+  const current = layer.scale ?? 1.0;
+
+  const writeScale = (v: number) => {
+    const clamped = Math.max(LOGO_SCALE_MIN, Math.min(LOGO_SCALE_MAX, v));
+    if (!sessionSnapshotRef.current) {
+      sessionSnapshotRef.current = beginEditSession();
+    }
+    mutateLive((doc) => {
+      const target = doc.font.layers.find((l) => l.id === layer.id);
+      if (!target || target.kind !== "logo") return;
+      // Omit `scale: 1` from the doc so projects without a user scale
+      // round-trip cleanly through JSON export.
+      if (clamped === 1) {
+        delete target.scale;
+      } else {
+        target.scale = clamped;
+      }
+    });
+  };
+
+  const commitDrag = () => {
+    if (sessionSnapshotRef.current) {
+      commitEditSession(sessionSnapshotRef.current);
+      sessionSnapshotRef.current = null;
+    }
+  };
+
+  const reset = () => {
+    if (!sessionSnapshotRef.current) {
+      sessionSnapshotRef.current = beginEditSession();
+    }
+    mutateLive((doc) => {
+      const target = doc.font.layers.find((l) => l.id === layer.id);
+      if (target && target.kind === "logo") delete target.scale;
+    });
+    commitDrag();
+  };
+
+  return (
+    <div class="bg-slate-800/60 border border-slate-800 rounded p-2 flex flex-col gap-1.5">
+      <div class="flex items-center justify-between">
+        <span class="text-[10px] font-mono text-slate-500 uppercase tracking-wider">
+          Scale
+        </span>
+        {current !== 1 && (
+          <button
+            onClick={reset}
+            class="text-slate-500 hover:text-osd-mint text-[10px] font-mono px-1"
+            title="Reset to fit (1.0×)"
+          >
+            reset
+          </button>
+        )}
+      </div>
+      <div class="flex items-center gap-2">
+        <input
+          type="range"
+          min={LOGO_SCALE_MIN}
+          max={LOGO_SCALE_MAX}
+          step={LOGO_SCALE_STEP}
+          value={current}
+          onInput={(e: Event) => writeScale(parseFloat((e.target as HTMLInputElement).value))}
+          onChange={commitDrag}
+          onPointerUp={commitDrag}
+          onBlur={commitDrag}
+          aria-label={`${layer.slot} logo scale`}
+          class="flex-1 accent-osd-mint"
+        />
+        <span class="text-slate-300 text-[11px] font-mono tabular-nums w-12 text-right">
+          {current.toFixed(2)}×
+        </span>
+      </div>
+      <p class="text-[10px] text-slate-500 leading-snug">
+        <span class="text-osd-amber">1.0×</span> fits the slot. Higher values
+        crop the logo's built-in padding; content past the slot edge clips.
+      </p>
+    </div>
+  );
+}
+
 function LogoSlotCard({ spec, mode }: { spec: LogoSlotSpec; mode: OsdMode }) {
   const layer = useComputed(() => findLogoLayerForSlot(spec.slot));
   const { assets } = useResolvedAssets();
@@ -291,37 +393,40 @@ function LogoSlotCard({ spec, mode }: { spec: LogoSlotSpec; mode: OsdMode }) {
       </div>
 
       {layer.value ? (
-        <div class="flex items-center gap-2 bg-slate-800 rounded p-2">
-          <span class="flex-1 truncate text-[11px] font-mono text-slate-200">
-            {layer.value.source.kind === "user"
-              ? layer.value.source.name
-              : layer.value.source.id}
-          </span>
-          <div class="flex gap-2">
-            {spec.drawable && (
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center gap-2 bg-slate-800 rounded p-2">
+            <span class="flex-1 truncate text-[11px] font-mono text-slate-200">
+              {layer.value.source.kind === "user"
+                ? layer.value.source.name
+                : layer.value.source.id}
+            </span>
+            <div class="flex gap-2">
+              {spec.drawable && (
+                <Button
+                  variant="secondary"
+                  onClick={openEditor}
+                  class="!px-3 !py-1 !text-[10px]"
+                  title="Open the pixel editor to tweak this logo in-place"
+                >
+                  ✎ Draw
+                </Button>
+              )}
+              <FileDrop
+                accept="image/*"
+                label="Replace"
+                onFile={(f) => uploadOrReplaceLogo(spec.slot, f)}
+                class="!p-2 !text-[10px]"
+              />
               <Button
-                variant="secondary"
-                onClick={openEditor}
+                variant="danger"
+                onClick={() => clearLogoSlot(spec.slot)}
                 class="!px-3 !py-1 !text-[10px]"
-                title="Open the pixel editor to tweak this logo in-place"
               >
-                ✎ Draw
+                Clear
               </Button>
-            )}
-            <FileDrop
-              accept="image/*"
-              label="Replace"
-              onFile={(f) => uploadOrReplaceLogo(spec.slot, f)}
-              class="!p-2 !text-[10px]"
-            />
-            <Button
-              variant="danger"
-              onClick={() => clearLogoSlot(spec.slot)}
-              class="!px-3 !py-1 !text-[10px]"
-            >
-              Clear
-            </Button>
+            </div>
           </div>
+          <LogoScaleEditor layer={layer.value} />
         </div>
       ) : spec.drawable ? (
         <div class="flex flex-col gap-2">

@@ -200,6 +200,14 @@ export interface LogoLayer {
   source: AssetRef;
   /** btfl = 576×144 big banner, inav = 240×144, mini = 120×36 callsign logo. */
   slot: "btfl" | "inav" | "mini";
+  /**
+   * Optional multiplier on the default aspect-fit scale used when the logo
+   * is sized into its slot. `1.0` (or missing) = fit the slot with
+   * chroma-gray letterboxing — the original behavior. `> 1` scales up past
+   * fit (content clips at the slot edges); `< 1` leaves more padding.
+   * Useful for PNG logos that ship with baked-in margins.
+   */
+  scale?: number;
   enabled: boolean;
 }
 

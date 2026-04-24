@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-04-23 — Scalable logo layers (BTFL banner + mini-logo)
+
+### Added — scale knob for logo layers
+
+- **Logo layers now have the same scale knob glyph overrides got in v0.3.5.** Same use case: PNG logos from templating tools / design apps often ship with 20–40% baked-in padding on each side, which made the logo read small in the slot under pure aspect-fit. The scale slider lets pilots crop that padding away.
+- **Schema:** optional `scale: number` on `LogoLayer`. Missing or `1.0` reproduces the previous aspect-fit + chroma-gray letterbox exactly. Resolver strips `scale: 1` from the doc on write so JSON diffs stay clean; older projects round-trip unchanged.
+- **Logo resolver:** `scaleImageToLogoSlot` now takes a `userScale` multiplier. Multiplies the aspect-fit `dw`/`dh`, centers via negative `dx`/`dy` when the image exceeds the slot, and relies on `OffscreenCanvas.drawImage` bounds clipping to handle the overflow — the result is a cover-style crop at the chosen scale.
+- **UI:** new `LogoScaleEditor` under each active logo's row on the Decoration page. Range 0.5×–3.0× in 0.05× steps with live preview, a `1.25×`-style readout, and a "reset" button once the scale is non-default.
+- **Undo:** slider uses the live-edit session pattern from v0.3.3 (snapshot on first drag tick, `mutateLive` per input, commit on pointer release / change / blur) — one drag is one undo entry, not fifty.
+
+### Tests
+
+- 225 tests, all green. No new tests — the logo resize path uses `OffscreenCanvas.drawImage` which isn't exercised under jsdom; the typecheck + the glyph-override scale coverage from v0.3.5 lock in the arithmetic shape.
+
+### Bumped
+
+- `package.json` version `0.3.5` → `0.3.6`.
+
 ## [0.3.5] - 2026-04-23 — Scalable glyph overrides
 
 ### Added — scale knob for glyph overrides

@@ -207,6 +207,15 @@ export interface OverrideSource {
   source: AssetRef;
   /** Optional tint. Non-transparent pixels are multiplied by this color. */
   tintColor?: HexColor;
+  /**
+   * Optional multiplier on the default aspect-fit scale used by
+   * imageRgbaToTile. `1.0` (or missing) = fit the tile with chroma-gray
+   * letterboxing — the original behavior. `> 1` scales up past the fit
+   * (content may clip at tile edges); `< 1` leaves more padding. Useful for
+   * icons whose own viewBox includes a chunk of internal padding that makes
+   * them read small inside the 24×36 / 12×18 tile.
+   */
+  scale?: number;
 }
 
 /** A binary blob referenced by the document. Concrete bytes live in the AssetStore. */

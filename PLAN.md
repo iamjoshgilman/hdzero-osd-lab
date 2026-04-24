@@ -1,12 +1,12 @@
 # hdzero-osd-lab — Implementation Plan
 
-Current release: **v0.3.4**. See [CHANGELOG.md](CHANGELOG.md) for per-release detail.
+Current release: **v0.3.5**. See [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 
 ## 1. Elevator Pitch
 
 hdzero-osd-lab is a purely client-side, browser-based studio for designing OSD fonts for Betaflight quads. It supports two targets: **HDZero HD** (24-bit color, 384×1152 BMP on SD card) and **analog MAX7456** (2-bit monochrome, .mcm flashed via Configurator's Font Manager). Pilots toggle between modes and the whole UI adapts — theme, dimensions, file formats, install flow. Built on top of the conceptual groundwork from the Python-based `HD-OSD-Font-Tools`, reimplemented in TypeScript with a WYSIWYG glyph atlas, TTF palette rendering, PNG glyph overrides, live simulated OSD preview with drag-positioned elements over FPV backgrounds, and end-to-end project persistence.
 
-## 1.5 Status (as of v0.3.4)
+## 1.5 Status (as of v0.3.5)
 
 **Shipped and stable:**
 
@@ -18,6 +18,7 @@ hdzero-osd-lab is a purely client-side, browser-based studio for designing OSD f
 - ✅ v0.3.2 — 23-issue polish pass driven by 6 parallel codebase audits. Closed several mode-switch race conditions, added a persistent error banner for storage failures (private browsing, quota, autosave), modal focus trap + aria-labels for the pixel editor, inline errors throughout (replacing OS dialogs), runtime shape validation on JSON/IDB reads.
 - ✅ v0.3.3 — Stabilized TTF palette layers (per-glyph random colors no longer reshuffle on FPV background swap, OSD drag, or tab switch) via per-layer `paletteSeed` + rasterization cache. Shipped a swatch-based palette editor with `↻ reroll`, and made the Edit TTF form live-preview every field (size, outline, stretch, colors, file replace) with single-undo-entry session semantics (Save commits, Cancel rolls back).
 - ✅ v0.3.4 — SVG support for glyph overrides via an `HTMLImageElement` + canvas rasterization path (works around cross-browser gaps in `createImageBitmap` on SVG). Per-override decode errors now surface inline under each override row — previously a single bad file silently blanked all overrides.
+- ✅ v0.3.5 — Scale knob on glyph overrides (`OverrideSource.scale`, slider in Inspector). Lets pilots push icons with internal viewBox padding out to fill the tile instead of rendering small under pure aspect-fit. Content past the tile edge clips. Slider uses the live-edit session pattern so a drag is one undo entry.
 
 **Planned next:** small follow-ups (HDZero font library browser, analog sample fonts) plus larger Phase 4 items (zip import/export, URL-fragment sharing, a11y completeness). See "Planned next" under Phase 4 below — no monolithic v1.0 milestone, items ship when worth shipping.
 

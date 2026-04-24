@@ -23,6 +23,14 @@ export interface ImageToTileOptions {
    * preserves the source image's proportions.
    */
   targetSize?: { w: number; h: number };
+  /**
+   * Multiplier on the aspect-fit scale factor. `1.0` (default) = fit the tile
+   * with chroma-gray letterboxing. `> 1` scales the content up past fit, and
+   * pixels that land outside the tile bounds get clipped. `< 1` leaves more
+   * chroma-gray padding. Used by the override-scale inspector so pilots can
+   * make icons with internal padding fill the tile.
+   */
+  scale?: number;
 }
 
 /**
@@ -33,9 +41,17 @@ export interface ImageToTileOptions {
 export function imageRgbaToTile(image: RgbaImage, opts: ImageToTileOptions = {}): Tile {
   const tint = opts.tintColor ? parseHex(opts.tintColor) : null;
   const target = opts.targetSize ?? GLYPH_SIZE;
-  const scale = Math.min(target.w / image.width, target.h / image.height);
+  // User-scale of 1.0 reproduces the original aspect-fit behavior exactly.
+  // Guard against non-positive values (UI slider should clamp; be defensive).
+  const userScale = opts.scale && opts.scale > 0 ? opts.scale : 1.0;
+  const fitScale = Math.min(target.w / image.width, target.h / image.height);
+  const scale = fitScale * userScale;
   const newW = Math.max(1, Math.round(image.width * scale));
   const newH = Math.max(1, Math.round(image.height * scale));
+  // offX/offY center the scaled image in the tile. When userScale > 1 the
+  // scaled image is larger than the tile and offX/offY go negative — the
+  // inner loop then clips pixels outside [0, target.*) so nothing writes
+  // out-of-bounds.
   const offX = Math.floor((target.w - newW) / 2);
   const offY = Math.floor((target.h - newH) / 2);
 
@@ -53,13 +69,17 @@ export function imageRgbaToTile(image: RgbaImage, opts: ImageToTileOptions = {})
   const dstStride = target.w * 3;
   const [bgR, bgG, bgB] = COLOR_TRANSPARENT;
   for (let dy = 0; dy < newH; dy++) {
+    const ty = offY + dy;
+    if (ty < 0 || ty >= target.h) continue;
     const srcY = Math.min(image.height - 1, Math.floor((dy + 0.5) / scale));
     for (let dx = 0; dx < newW; dx++) {
+      const tx = offX + dx;
+      if (tx < 0 || tx >= target.w) continue;
       const srcX = Math.min(image.width - 1, Math.floor((dx + 0.5) / scale));
       const sOff = srcY * srcStride + srcX * 4;
       const a = image.data[sOff + 3]!;
       if (a === 0) continue;
-      const dOff = (offY + dy) * dstStride + (offX + dx) * 3;
+      const dOff = ty * dstStride + tx * 3;
       let r = tint ? tint[0] : image.data[sOff]!;
       let g = tint ? tint[1] : image.data[sOff + 1]!;
       let b = tint ? tint[2] : image.data[sOff + 2]!;

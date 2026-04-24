@@ -83,4 +83,64 @@ describe("imageRgbaToTile", () => {
     const mid = 9 * ANALOG_GLYPH_SIZE.w * 3;
     expect([tile[mid], tile[mid + 1], tile[mid + 2]]).toEqual([255, 0, 0]);
   });
+
+  it("scale=1 matches the no-scale default (baseline invariant)", () => {
+    const src = solidRgba(100, 100, [12, 34, 56, 255]);
+    const baseline = imageRgbaToTile(src);
+    const explicit = imageRgbaToTile(src, { scale: 1.0 });
+    expect(explicit).toEqual(baseline);
+  });
+
+  it("scale > 1 enlarges the content past aspect-fit and clips at tile edges", () => {
+    // 100×100 → aspect-fit scale = 0.24 → 24×24 centered in 24×36 tile
+    // (offY=6, so rows 6..29 are red, rows 0..5 and 30..35 are chroma-gray).
+    // With scale=2, the scaled box is 48×48 centered (offX=-12, offY=-6);
+    // every in-tile pixel lands inside the red block → no chroma-gray bars.
+    const src = solidRgba(100, 100, [255, 0, 0, 255]);
+    const tile = imageRgbaToTile(src, { scale: 2.0 });
+    // Top-left pixel used to be chroma-gray under the default; now it's red.
+    expect([tile[0], tile[1], tile[2]]).toEqual([255, 0, 0]);
+    // Bottom-right pixel likewise.
+    const lastPixelOffset = (GLYPH_SIZE.w * GLYPH_SIZE.h - 1) * 3;
+    expect([
+      tile[lastPixelOffset],
+      tile[lastPixelOffset + 1],
+      tile[lastPixelOffset + 2],
+    ]).toEqual([255, 0, 0]);
+  });
+
+  it("scale < 1 produces extra chroma-gray padding around a square input", () => {
+    // 100×100 → fit=0.24 → 24×24 red. With scale=0.5, effective=0.12 → 12×12
+    // red block centered (offX=6, offY=12). Corners and far edges stay gray.
+    const src = solidRgba(100, 100, [255, 0, 0, 255]);
+    const tile = imageRgbaToTile(src, { scale: 0.5 });
+    // Corner: gray
+    expect([tile[0], tile[1], tile[2]]).toEqual([127, 127, 127]);
+    // Center: should be red
+    const cx = Math.floor(GLYPH_SIZE.w / 2);
+    const cy = Math.floor(GLYPH_SIZE.h / 2);
+    const centerOffset = (cy * GLYPH_SIZE.w + cx) * 3;
+    expect([
+      tile[centerOffset],
+      tile[centerOffset + 1],
+      tile[centerOffset + 2],
+    ]).toEqual([255, 0, 0]);
+    // Right-edge middle row: should still be gray (scaled block is narrower).
+    const rightOffset = (cy * GLYPH_SIZE.w + (GLYPH_SIZE.w - 1)) * 3;
+    expect([
+      tile[rightOffset],
+      tile[rightOffset + 1],
+      tile[rightOffset + 2],
+    ]).toEqual([127, 127, 127]);
+  });
+
+  it("scale of zero / negative is treated as 1.0 (defensive fallback)", () => {
+    // UI clamps the slider to > 0, but imageRgbaToTile is also called from
+    // headless test harnesses and the cache layer — guard against pathological
+    // inputs rather than outputting an empty tile.
+    const src = solidRgba(100, 100, [12, 34, 56, 255]);
+    const baseline = imageRgbaToTile(src);
+    expect(imageRgbaToTile(src, { scale: 0 })).toEqual(baseline);
+    expect(imageRgbaToTile(src, { scale: -1 })).toEqual(baseline);
+  });
 });

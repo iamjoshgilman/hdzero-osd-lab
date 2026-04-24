@@ -445,10 +445,15 @@ async function loadOverrideTiles(
         errs[errKey] = "image decoder returned no data";
         continue;
       }
-      const opts: { targetSize: { w: number; h: number }; tintColor?: string } = {
+      const opts: {
+        targetSize: { w: number; h: number };
+        tintColor?: string;
+        scale?: number;
+      } = {
         targetSize,
       };
       if (override.tintColor) opts.tintColor = override.tintColor;
+      if (override.scale !== undefined && override.scale !== 1) opts.scale = override.scale;
       const tile = imageRgbaToTile(rgba, opts);
       out.overrides.set(Number(codeStr), tile);
     } catch (err) {

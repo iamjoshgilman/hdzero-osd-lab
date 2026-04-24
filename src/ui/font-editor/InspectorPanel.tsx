@@ -8,7 +8,13 @@
 
 import { useComputed } from "@preact/signals";
 import { useEffect, useRef, useState } from "preact/hooks";
-import { project, mutate } from "@/state/store";
+import {
+  project,
+  mutate,
+  mutateLive,
+  beginEditSession,
+  commitEditSession,
+} from "@/state/store";
 import { putAsset } from "@/state/assets";
 import { selectedGlyph } from "@/state/ui-state";
 import { compose } from "@/compositor/compose";
@@ -16,7 +22,7 @@ import { extractTile, extractAnalogTile } from "@/compositor/atlas";
 import { GLYPH_SIZE, ANALOG_GLYPH_SIZE } from "@/compositor/constants";
 import { useResolvedAssets } from "@/ui/hooks/useResolvedAssets";
 import { lookupSymbol } from "@/osd-schema";
-import type { HexColor, OsdMode } from "@/state/project";
+import type { HexColor, OsdMode, ProjectDoc } from "@/state/project";
 import { PixelEditor } from "@/ui/pixel-editor/PixelEditor";
 import { rgbToPngBlob } from "@/ui/pixel-editor/pixel-ops";
 import { Button } from "@/ui/shared/Button";
@@ -201,6 +207,11 @@ function GlyphDetails({
         )}
       </section>
 
+      {/* Scale knob is only meaningful when there's a user-uploaded override
+          for this glyph — built-in tiles and layer-drawn glyphs don't go
+          through imageRgbaToTile. */}
+      <OverrideScaleEditor code={code} />
+
       {/* Color tint is HD-only — MAX7456 is 2-bit monochrome, so any tint
           would get flattened to black/white at export and mislead the pilot
           about what the goggle will actually show. */}
@@ -224,6 +235,104 @@ function clearTint(code: number): void {
     delete next[code];
     doc.font.tints = next;
   });
+}
+
+/** Slider bounds. ≥ 0.5 (never invert) and ≤ 3.0 (diminishing returns past that). */
+const SCALE_MIN = 0.5;
+const SCALE_MAX = 3.0;
+const SCALE_STEP = 0.05;
+
+function OverrideScaleEditor({ code }: { code: number }) {
+  // Only surfaces when the glyph actually has an override. Built-in /
+  // layer-rendered tiles don't flow through imageRgbaToTile, so a scale
+  // slider would silently no-op there.
+  const override = useComputed(() => project.value.font.overrides[code] ?? null);
+  // Drag-session anchoring for undo coalescing. The input fires onInput
+  // continuously during drag — without coalescing each tick would become
+  // its own undo entry. Snapshot on first tick; commit on blur / onChange
+  // (pointer release). See store.ts commitEditSession for the contract.
+  const sessionSnapshotRef = useRef<ProjectDoc | null>(null);
+
+  if (!override.value) return null;
+  const current = override.value.scale ?? 1.0;
+
+  const writeScale = (v: number) => {
+    // Clamp to the slider's advertised range so typing into the associated
+    // number input (future) can't smuggle values past the bounds either.
+    const clamped = Math.max(SCALE_MIN, Math.min(SCALE_MAX, v));
+    if (!sessionSnapshotRef.current) {
+      sessionSnapshotRef.current = beginEditSession();
+    }
+    mutateLive((doc) => {
+      const ov = doc.font.overrides[code];
+      if (!ov) return;
+      if (clamped === 1) {
+        // Round-trip cleanliness: keep the doc free of `scale: 1` noise so
+        // exports / diffs don't show a redundant field on every override.
+        delete ov.scale;
+      } else {
+        ov.scale = clamped;
+      }
+    });
+  };
+
+  const commitDrag = () => {
+    if (sessionSnapshotRef.current) {
+      commitEditSession(sessionSnapshotRef.current);
+      sessionSnapshotRef.current = null;
+    }
+  };
+
+  const reset = () => {
+    if (!sessionSnapshotRef.current) {
+      sessionSnapshotRef.current = beginEditSession();
+    }
+    mutateLive((doc) => {
+      const ov = doc.font.overrides[code];
+      if (ov) delete ov.scale;
+    });
+    commitDrag();
+  };
+
+  return (
+    <section>
+      <div class="flex items-center justify-between mb-1">
+        <h3 class="text-slate-500 uppercase tracking-wider text-[10px]">Scale</h3>
+        {current !== 1 && (
+          <button
+            onClick={reset}
+            class="text-slate-500 hover:text-osd-mint text-[10px] px-1"
+            title="Reset to fit (1.0×)"
+          >
+            reset
+          </button>
+        )}
+      </div>
+      <div class="flex items-center gap-2">
+        <input
+          type="range"
+          min={SCALE_MIN}
+          max={SCALE_MAX}
+          step={SCALE_STEP}
+          value={current}
+          onInput={(e: Event) => writeScale(parseFloat((e.target as HTMLInputElement).value))}
+          onChange={commitDrag}
+          onPointerUp={commitDrag}
+          onBlur={commitDrag}
+          aria-label="Override image scale"
+          class="flex-1 accent-osd-mint"
+        />
+        <span class="text-slate-300 w-10 text-right tabular-nums">
+          {current.toFixed(2)}×
+        </span>
+      </div>
+      <p class="text-[10px] text-slate-500 mt-1 leading-snug">
+        <span class="text-osd-amber">1.0×</span> fits the tile with chroma-gray
+        padding. Higher values make the icon fill more of the tile; content
+        past the tile edge gets clipped.
+      </p>
+    </section>
+  );
 }
 
 function TintEditor({ code }: { code: number }) {

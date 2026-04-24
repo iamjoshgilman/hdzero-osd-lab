@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-04-23 — Scalable glyph overrides
+
+### Added — scale knob for glyph overrides
+
+- **Override images can now be scaled past the aspect-fit default.** Icons with internal viewBox padding (common on SVGs from icon packs) read small inside a 24×36 / 12×18 tile under pure aspect-fit; the new `scale` field multiplies the fit factor so pilots can push the content out to fill the tile. Range 0.5×–3.0× in 0.05× steps; content past the tile edge gets clipped (intentional — lets you crop an icon's padding away).
+- **Schema:** optional `scale: number` on `OverrideSource`. Missing or `1.0` behaves exactly as before (aspect-fit + chroma-gray letterbox), so older projects round-trip unchanged. The resolver omits `scale` from the doc when equal to `1.0` to keep JSON diffs clean.
+- **Compositor:** `imageRgbaToTile` takes an optional `scale` opt, multiplies the aspect-fit scale by it, clips pixels that land outside the tile, and defensively falls back to `1.0` for zero / negative inputs.
+- **UI:** new "Scale" section in the glyph inspector, visible only when the selected glyph has a user override. Range slider with live preview + numeric readout; a "reset" button appears once the scale is non-default.
+- **Undo coalescing:** the slider uses the live-edit session helpers from v0.3.3 (`beginEditSession` on first drag tick, `mutateLive` on each `onInput`, `commitEditSession` on `onChange` / pointer up / blur). One slider drag = one undo entry, not fifty.
+
+### Tests
+
+- 225 tests, all green (was 221). Added coverage on `imageRgbaToTile`: `scale=1` matches the no-scale default (baseline invariant), `scale=2` fills a formerly-letterboxed square source, `scale=0.5` adds extra padding around the centered content, and pathological inputs (`scale=0`, `scale=-1`) fall back to `1.0` instead of rendering an empty tile.
+
+### Bumped
+
+- `package.json` version `0.3.4` → `0.3.5`.
+
 ## [0.3.4] - 2026-04-23 — SVG glyph overrides + per-override error surface
 
 ### Added — SVG support for glyph overrides

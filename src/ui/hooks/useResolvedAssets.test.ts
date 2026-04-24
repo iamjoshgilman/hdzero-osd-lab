@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ttfCacheKey } from "./useResolvedAssets";
+import { ttfCacheKey, isSvgSource } from "./useResolvedAssets";
 import type { TtfLayer } from "@/state/project";
 
 // The TTF rasterization cache in useResolvedAssets keys on a stable fingerprint
@@ -94,5 +94,35 @@ describe("ttfCacheKey", () => {
     const layer = baseLayer();
     delete (layer as { paletteSeed?: number }).paletteSeed;
     expect(ttfCacheKey(layer, 1, TARGET)).not.toBe(ttfCacheKey(layer, 2, TARGET));
+  });
+});
+
+describe("isSvgSource", () => {
+  // Glyph overrides accept SVG. Detection needs to be permissive about MIME
+  // because some OSes / drag-drop flows don't populate it — filename fallback
+  // keeps those working.
+
+  it("detects SVG via the canonical MIME type", () => {
+    expect(isSvgSource("image/svg+xml", "anything.bin")).toBe(true);
+  });
+
+  it("detects SVG via filename extension when MIME is missing", () => {
+    expect(isSvgSource("", "icon.svg")).toBe(true);
+  });
+
+  it("is case-insensitive on the extension", () => {
+    expect(isSvgSource("", "LOGO.SVG")).toBe(true);
+    expect(isSvgSource("", "LoGo.Svg")).toBe(true);
+  });
+
+  it("does NOT trigger on PNG / JPEG / BMP", () => {
+    expect(isSvgSource("image/png", "a.png")).toBe(false);
+    expect(isSvgSource("image/jpeg", "a.jpg")).toBe(false);
+    expect(isSvgSource("image/bmp", "a.bmp")).toBe(false);
+  });
+
+  it("does NOT trigger on filenames that merely contain 'svg' mid-string", () => {
+    expect(isSvgSource("image/png", "my-svg-icons.png")).toBe(false);
+    expect(isSvgSource("", "svg-logo-renamed.gif")).toBe(false);
   });
 });

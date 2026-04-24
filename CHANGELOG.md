@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-04-23 — SVG glyph overrides + per-override error surface
+
+### Added — SVG support for glyph overrides
+
+- **Glyph overrides now accept `.svg` in addition to PNG / JPEG / BMP / GIF / WebP.** `createImageBitmap(blob)` doesn't cross-browser-rasterize SVG (Chrome tolerates fixed-dimension SVGs; Firefox / Safari frequently reject or return a 0×0 bitmap), so SVG is routed through an `HTMLImageElement` + object-URL path (`decodeSvgToRgba`). Renders at a 256-px-longest-edge supersample preserving the SVG's natural aspect, then the existing `imageRgbaToTile` nearest-neighbor scaler produces the 24×36 / 12×18 tile.
+- **SVG detection** is permissive: canonical MIME (`image/svg+xml`) first, filename-extension fallback (`.svg`, case-insensitive) second — some OSes and drag-drop flows don't populate MIME, so MIME-alone detection was previously failing silently on those.
+- **File picker `accept` attr** now explicitly lists PNG / JPEG / BMP / GIF / WebP / SVG by both MIME and extension, so the system file dialog actually shows them.
+
+### Added — per-override error surface
+
+- Override decode errors used to propagate up and short-circuit the entire resolver, so a single bad file blanked *all* override tiles. Each override is now decoded inside its own try/catch; failures land under `override:<code>` in the shared `layerErrors` signal. `LayersPanel` renders the error message inline under the override row (same visual pattern as layer errors — red tint, `⚠` prefix). No more silent failures on unsupported files.
+
+### Security note
+
+- SVGs are rendered via `<img>`, not `<object>` or `<iframe>`, so scripts inside the SVG don't execute. External resource refs in the SVG (absolute-URL `<image>`, `<use>` from other origins) will taint the canvas and surface as a `decode failed: …` error on the override row rather than silently corrupting the output.
+
+### Tests
+
+- 221 tests, all green (was 216). Added `isSvgSource` coverage: canonical MIME, extension fallback, case-insensitive match, correct rejection of non-SVG MIMEs and of filenames that merely contain "svg" mid-string.
+
+### Bumped
+
+- `package.json` version `0.3.3` → `0.3.4`.
+
 ## [0.3.3] - 2026-04-23 — Stable palette colors + live-edit TTF form
 
 Fixes a reported bug where TTF palette layers reshuffled their per-glyph colors on every unrelated action (changing the FPV background, dragging an OSD element, switching tabs). Also makes the TTF layer editor live-preview every field while you dial it in, instead of forcing a Save-and-reopen cycle per tweak.

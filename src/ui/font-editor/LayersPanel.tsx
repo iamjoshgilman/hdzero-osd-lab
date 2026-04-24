@@ -411,26 +411,41 @@ export function LayersPanel() {
         </p>
         <OverrideAdder onAdd={addOverride} />
         <ul class="flex flex-col gap-1 mt-3">
-          {overrideEntries.value.map(([codeStr, ov]) => (
-            <li
-              key={codeStr}
-              class="flex items-center gap-2 bg-slate-800 rounded p-2 font-mono text-xs"
-            >
-              <span class="text-osd-mint w-10">#{codeStr}</span>
-              <span class="flex-1 truncate text-slate-400">
-                {ov.source.kind === "user" ? ov.source.name : ov.source.id}
-              </span>
-              <Button
-                variant="danger"
-                onClick={() => removeOverride(Number(codeStr))}
-                aria-label={`Remove override for glyph ${codeStr}`}
-                class="!px-2 !py-1"
-                title="Remove this override"
+          {overrideEntries.value.map(([codeStr, ov]) => {
+            // Override decode errors land under the `override:<code>` key in
+            // the shared layerErrors map (see useResolvedAssets'
+            // loadOverrideTiles). Rendered inline so a bad SVG / corrupt PNG
+            // doesn't fail silently.
+            const err = layerErrors.value[`override:${codeStr}`];
+            return (
+              <li
+                key={codeStr}
+                class={[
+                  "flex flex-col gap-1 rounded p-2 font-mono text-xs",
+                  err ? "bg-red-950/60 border border-osd-alert/60" : "bg-slate-800",
+                ].join(" ")}
               >
-                ×
-              </Button>
-            </li>
-          ))}
+                <div class="flex items-center gap-2">
+                  <span class="text-osd-mint w-10">#{codeStr}</span>
+                  <span class="flex-1 truncate text-slate-400">
+                    {ov.source.kind === "user" ? ov.source.name : ov.source.id}
+                  </span>
+                  <Button
+                    variant="danger"
+                    onClick={() => removeOverride(Number(codeStr))}
+                    aria-label={`Remove override for glyph ${codeStr}`}
+                    class="!px-2 !py-1"
+                    title="Remove this override"
+                  >
+                    ×
+                  </Button>
+                </div>
+                {err && (
+                  <p class="text-[10px] text-osd-alert leading-snug pl-12">⚠ {err}</p>
+                )}
+              </li>
+            );
+          })}
         </ul>
       </section>
     </aside>
@@ -590,7 +605,15 @@ function OverrideAdder({ onAdd }: { onAdd: (code: number, file: File) => void })
           }}
           class="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-slate-100"
         />
-        <input ref={fileRef} type="file" accept="image/*" class="hidden" />
+        <input
+          ref={fileRef}
+          type="file"
+          // Explicit extensions + MIME globs: some OSes set `image/*` for
+          // SVGs, others leave MIME blank on drag-drop. Listing `.svg`
+          // explicitly keeps them selectable in the picker.
+          accept="image/png,image/jpeg,image/bmp,image/gif,image/webp,image/svg+xml,.png,.jpg,.jpeg,.bmp,.gif,.webp,.svg"
+          class="hidden"
+        />
         <Button variant="secondary" onClick={triggerUpload}>
           Upload
         </Button>

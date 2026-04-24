@@ -74,7 +74,7 @@ export function useResolvedAssets(): ResolvedAssetsState {
         await loadTtfLayers(doc, next, errs);
         await loadMcmLayers(doc, next, errs);
         await loadLogoLayers(doc, next, errs);
-        await loadOverrideTiles(doc, next);
+        await loadOverrideTiles(doc, next, errs);
         if (!isStale()) {
           state.assets.value = next;
           state.layerErrors.value = errs;
@@ -417,26 +417,66 @@ async function rasterizeOneTtfLayer(
   });
 }
 
-async function loadOverrideTiles(doc: ProjectDoc, out: ResolvedAssets): Promise<void> {
+/**
+ * An override's decode can fail (unsupported format, corrupt bytes, external
+ * SVG references that taint the canvas). Errors used to propagate up and
+ * short-circuit the whole resolver, so a single bad override blanked all
+ * override tiles. Per-override try/catch + `override:<code>` keys in the
+ * shared errs map localize failures; the LayersPanel renders them inline
+ * under each row.
+ */
+async function loadOverrideTiles(
+  doc: ProjectDoc,
+  out: ResolvedAssets,
+  errs: Record<string, string>,
+): Promise<void> {
   const targetSize = doc.meta.mode === "analog" ? ANALOG_GLYPH_SIZE : GLYPH_SIZE;
   for (const [codeStr, override] of Object.entries(doc.font.overrides)) {
     if (override.source.kind !== "user") continue;
+    const errKey = `override:${codeStr}`;
     const rec = await getAsset(override.source.hash);
-    if (!rec) continue;
-    const rgba = await decodeImageToRgba(rec.bytes, rec.mime);
-    if (!rgba) continue;
-    const opts: { targetSize: { w: number; h: number }; tintColor?: string } = {
-      targetSize,
-    };
-    if (override.tintColor) opts.tintColor = override.tintColor;
-    const tile = imageRgbaToTile(rgba, opts);
-    out.overrides.set(Number(codeStr), tile);
+    if (!rec) {
+      errs[errKey] = "asset not found in browser storage";
+      continue;
+    }
+    try {
+      const rgba = await decodeImageToRgba(rec.bytes, rec.mime, override.source.name);
+      if (!rgba) {
+        errs[errKey] = "image decoder returned no data";
+        continue;
+      }
+      const opts: { targetSize: { w: number; h: number }; tintColor?: string } = {
+        targetSize,
+      };
+      if (override.tintColor) opts.tintColor = override.tintColor;
+      const tile = imageRgbaToTile(rgba, opts);
+      out.overrides.set(Number(codeStr), tile);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Most common failures at this point: tainted-canvas SecurityError for
+      // SVGs that reference external resources, or an SVG with malformed
+      // XML that Image.decode rejected.
+      errs[errKey] = `decode failed: ${msg}`;
+      console.error(`Override tile #${codeStr} failed to decode:`, err);
+    }
   }
+}
+
+/**
+ * True when the asset looks like SVG. Checks MIME first, then falls back to
+ * the filename extension — some browsers don't set the MIME type when the
+ * user drops an `.svg` file, so relying on MIME alone would silently skip
+ * legit SVGs.
+ */
+export function isSvgSource(mime: string, name: string): boolean {
+  if (mime === "image/svg+xml") return true;
+  return /\.svg$/i.test(name);
 }
 
 async function decodeImageToRgba(
   bytes: ArrayBuffer,
   mime: string,
+  name: string,
 ): Promise<{ width: number; height: number; data: Uint8ClampedArray } | null> {
   if (mime === "image/bmp") {
     const rgb = decodeBmp(bytes);
@@ -449,6 +489,14 @@ async function decodeImageToRgba(
       rgba[j + 3] = 255;
     }
     return { width: rgb.width, height: rgb.height, data: rgba };
+  }
+  // SVG: createImageBitmap(blob) doesn't reliably rasterize SVGs across
+  // Firefox/Safari (Chrome tolerates fixed-dimension SVGs, others often
+  // reject or return a 0×0 bitmap). Route SVG through an HTMLImageElement
+  // instead — it handles viewBox / width+height / dimensionless SVGs
+  // consistently across browsers.
+  if (isSvgSource(mime, name)) {
+    return decodeSvgToRgba(bytes);
   }
   // PNG / JPG / others: decode via Canvas. The bitmap holds GPU memory —
   // close it in finally so exceptions mid-decode (tainted canvas, OOM,
@@ -468,5 +516,57 @@ async function decodeImageToRgba(
     };
   } finally {
     bmp.close();
+  }
+}
+
+/**
+ * Rasterize an SVG asset to RGBA. Renders at a capped supersample (256px on
+ * the longest edge, preserving the SVG's natural aspect) so the downstream
+ * nearest-neighbor scaler in imageRgbaToTile has enough detail to produce a
+ * crisp 24×36 / 12×18 tile without rasterizing directly at target res
+ * (which, at 24×36, turns any detail into mush).
+ *
+ * Uses an object URL + HTMLImageElement because cross-browser SVG decode via
+ * createImageBitmap is unreliable. `<img>` tag rendering does NOT execute
+ * scripts inside the SVG — safer than `<object>` / `<iframe>` embedding.
+ */
+async function decodeSvgToRgba(
+  bytes: ArrayBuffer,
+): Promise<{ width: number; height: number; data: Uint8ClampedArray }> {
+  const blob = new Blob([bytes], { type: "image/svg+xml" });
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = new Image();
+    img.src = url;
+    // `await img.decode()` resolves once the SVG has been parsed and is
+    // ready to draw. If the SVG is malformed it rejects with an error that
+    // bubbles up to the caller's per-override try/catch.
+    await img.decode();
+    // Dimensionless SVGs (no width/height/viewBox) fall back to the browser
+    // default, usually 300×150 — use that to preserve the "what you saw in
+    // the browser" aspect ratio. Guard against 0 just in case.
+    const naturalW = img.naturalWidth || 300;
+    const naturalH = img.naturalHeight || 150;
+    const aspect = naturalW / naturalH;
+    const maxEdge = 256;
+    let w: number;
+    let h: number;
+    if (aspect >= 1) {
+      w = maxEdge;
+      h = Math.max(1, Math.round(maxEdge / aspect));
+    } else {
+      h = maxEdge;
+      w = Math.max(1, Math.round(maxEdge * aspect));
+    }
+    const canvas = new OffscreenCanvas(w, h);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("SVG decode: 2D context unavailable");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(img, 0, 0, w, h);
+    const data = ctx.getImageData(0, 0, w, h);
+    return { width: w, height: h, data: new Uint8ClampedArray(data.data.buffer) };
+  } finally {
+    URL.revokeObjectURL(url);
   }
 }

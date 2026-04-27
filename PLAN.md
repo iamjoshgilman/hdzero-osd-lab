@@ -1,12 +1,12 @@
 # hdzero-osd-lab — Implementation Plan
 
-Current release: **v0.3.8**. See [CHANGELOG.md](CHANGELOG.md) for per-release detail.
+Current release: **v0.3.9**. See [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 
 ## 1. Elevator Pitch
 
 hdzero-osd-lab is a purely client-side, browser-based studio for designing OSD fonts for Betaflight quads. It supports two targets: **HDZero HD** (24-bit color, 384×1152 BMP on SD card) and **analog MAX7456** (2-bit monochrome, .mcm flashed via Configurator's Font Manager). Pilots toggle between modes and the whole UI adapts — theme, dimensions, file formats, install flow. Built on top of the conceptual groundwork from the Python-based `HD-OSD-Font-Tools`, reimplemented in TypeScript with a WYSIWYG glyph atlas, TTF palette rendering, PNG glyph overrides, live simulated OSD preview with drag-positioned elements over FPV backgrounds, and end-to-end project persistence.
 
-## 1.5 Status (as of v0.3.8)
+## 1.5 Status (as of v0.3.9)
 
 **Shipped and stable:**
 
@@ -22,6 +22,7 @@ hdzero-osd-lab is a purely client-side, browser-based studio for designing OSD f
 - ✅ v0.3.6 — Same scale knob extended to logo layers (`LogoLayer.scale`, slider in each LogoSlotCard on the Decoration page). Crops the baked-in padding PNG logo templates ship with so the BTFL banner / mini-logo actually fills the slot.
 - ✅ v0.3.7 — Live preview on each Decoration logo card so dialing in the v0.3.6 scale slider isn't blind. Reads the resolver's post-scaled RGBA, renders chroma-gray as transparent over a dark bg, CSS-pixelated-upscales to fit the card.
 - ✅ v0.3.8 — Editor-overhaul batch: canvas scroll-to-edges fix (flex-centering + overflow was hiding the left edge when zoomed past container); scale slider moved from Decoration cards INTO the pixel-editor modal where paint tools also live, so both BTFL banner and mini-logo share one "✎ Edit" affordance; BTFL banner became drawable (zoom + scroll + scale made pixel-by-pixel viable); 1–16 px square brush for pencil/eraser with hover outline; shift-drag axis-lock for straight lines.
+- ✅ v0.3.9 — Hotfix: rules-of-hooks violation in `FontPreview` caused stale canvas content + theme glitches when toggling rapidly between HDZero and Analog modes. Hook count differed between renders (8 vs 9 depending on `hasLayers`), Preact's positional hook list misaligned. Fix: split into outer (stable hooks, picks empty-state vs content) + inner `FontPreviewContent` that only mounts when there are layers.
 
 **Planned next:** small follow-ups (HDZero font library browser, analog sample fonts) plus larger Phase 4 items (zip import/export, URL-fragment sharing, a11y completeness). See "Planned next" under Phase 4 below — no monolithic v1.0 milestone, items ship when worth shipping.
 

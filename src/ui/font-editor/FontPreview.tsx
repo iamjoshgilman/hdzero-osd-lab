@@ -66,14 +66,42 @@ const PREVIEW_BACKGROUNDS = {
 } as const;
 type PreviewBg = keyof typeof PREVIEW_BACKGROUNDS;
 
+/**
+ * Outer component: picks between the empty-state placeholder and the
+ * full preview body based on whether the project has any layers. Only
+ * uses two computeds — its hook count is stable across renders, so
+ * Preact's positional hook list never gets misaligned.
+ *
+ * The hook-count stability matters: previously this component held all
+ * the hooks AND an early return, which violated rules-of-hooks. When the
+ * user toggled HD ↔ Analog and one mode had no archived font, hasLayers
+ * flipped, the hook count changed, and downstream state (canvas-draw
+ * effect, refs, useState slots) got misaligned. Visible symptom: stale
+ * canvas content showing the previous mode's font after the switch.
+ */
 export function FontPreview() {
+  const hasLayers = useComputed(() => project.value.font.layers.length > 0);
+  const mode = useComputed(() => project.value.meta.mode);
+
+  if (!hasLayers.value) {
+    return <EmptyFontState mode={mode.value} />;
+  }
+  return <FontPreviewContent />;
+}
+
+/**
+ * Hook-heavy preview body. Mounts only when the project has layers, so all
+ * its hooks run on every render of THIS component instance — no early
+ * returns inside, no conditional hooks. When the parent's hasLayers flips
+ * back to false, this whole component unmounts cleanly.
+ */
+function FontPreviewContent() {
   const { assets, loading, error } = useResolvedAssets();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [showGrid, setShowGrid] = useState<boolean>(false);
   const [showOverlay, setShowOverlay] = useState<boolean>(false);
   const [bgMode, setBgMode] = useState<PreviewBg>("chroma");
 
-  const hasLayers = useComputed(() => project.value.font.layers.length > 0);
   const mode = useComputed(() => project.value.meta.mode);
   const atlas = useComputed(() => compose(project.value, assets.value));
   const dims = dimsForMode(mode.value);
@@ -85,14 +113,6 @@ export function FontPreview() {
   const setZoom = (v: number) => {
     fontPreviewZoom.value = { ...fontPreviewZoom.value, [mode.value]: v };
   };
-
-  // ⚠ Hook rule: all useState / useRef / useEffect / useComputed calls MUST
-  // happen above this early return. Adding a hook below this line without
-  // moving this return into the JSX tree will break the rules-of-hooks order
-  // when the empty-state path is taken.
-  if (!hasLayers.value) {
-    return <EmptyFontState mode={mode.value} />;
-  }
 
   useEffect(() => {
     const canvas = canvasRef.current;

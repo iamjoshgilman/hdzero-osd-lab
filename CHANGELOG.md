@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.9] - 2026-04-27 — Hotfix: FontPreview hooks-order violation breaks mode switch
+
+### Fixed — FontPreview rules-of-hooks violation
+
+- **Switching rapidly between HDZero and Analog modes left the canvas showing the previous mode's font and / or skipped the theme color swap.** Root cause: `FontPreview` had a `useEffect` placed *after* an early return on `!hasLayers.value`. Hook count therefore differed between renders (8 hooks when no layers, 9 when there are), and Preact's positional hook list got misaligned whenever the user toggled between a mode with an archived font and a mode without. Misaligned hooks meant `useState` slots, the canvas-draw `useEffect`, and the `useRef` for the canvas element were reading out-of-order — visible symptom: stale canvas content rendered for the new mode, theme palette occasionally not propagating.
+- **Fix:** split `FontPreview` into outer + inner components. Outer holds only two stable `useComputed` calls and picks between `EmptyFontState` and `<FontPreviewContent />`. Inner `FontPreviewContent` holds all the original hooks and only mounts when there are layers — when `hasLayers` flips, the whole inner unmounts cleanly instead of corrupting hook ordering.
+- Comment in `OsdCanvas` warning of the same hazard verified — `OsdCanvas`'s hooks are all correctly placed before its early return, so it didn't have the bug.
+
+### Tests
+
+- 229 tests, all green. No new tests — the bug was a hooks-ordering corruption that manifests at runtime under rapid signal changes; meaningfully testable only via a full Preact reconciler harness with mode toggling, which is more setup than payoff for a one-line structural fix.
+
+### Bumped
+
+- `package.json` version `0.3.8` → `0.3.9`.
+
 ## [0.3.8] - 2026-04-24 — Editor overhaul: scroll fix, unified logo edit, brush size, shift-lock
 
 A batched polish pass driven by live dev-server hunting — six findings across the pixel editor and Decoration page consolidated into one release instead of shipping each as its own patch.
